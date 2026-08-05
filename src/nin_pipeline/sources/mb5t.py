@@ -19,6 +19,7 @@ from nin_pipeline.sources.sap_text import (
     normalize_material,
     normalize_plant,
     parse_pipe_delimited_sap_export,
+    reorder_columns_pq_style,
     to_integer,
     to_number,
 )
@@ -65,6 +66,14 @@ def clean_mb5t(path: Path, active_plant: str) -> pd.DataFrame:
     section 7.6 -- kept only for shape compatibility with an earlier
     defined-set grouping that no longer applies), sorts by `Plnt`/`Material`,
     and drops rows with a blank `Material`.
+
+    Column ordering mirrors `Table.ReorderColumns(..., MissingField.Ignore)`:
+    columns in `CLEAN_COLUMN_ORDER` are moved to the front in that order,
+    and any other column present in the export (e.g. the real raw header's
+    `Amount LC`, which doesn't match the `.pq`'s expected `"Amount in LC"`
+    name -- see docs/nin_data_contracts.md Open Decision #5) is *not*
+    dropped, only appended at the end, matching real `Table.ReorderColumns`
+    semantics.
     """
     df = parse_pipe_delimited_sap_export(
         path,
@@ -91,8 +100,8 @@ def clean_mb5t(path: Path, active_plant: str) -> pd.DataFrame:
     df = df.sort_values(["Plnt", "Material"], kind="stable")
     df = df[df["Material"] != ""]
 
-    ordered_columns = [c for c in CLEAN_COLUMN_ORDER if c in df.columns]
-    return df[ordered_columns].reset_index(drop=True)
+    df = reorder_columns_pq_style(df, list(CLEAN_COLUMN_ORDER))
+    return df.reset_index(drop=True)
 
 
 def enrich_mb5t(clean_df: pd.DataFrame) -> pd.DataFrame:

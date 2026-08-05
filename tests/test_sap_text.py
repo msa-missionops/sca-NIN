@@ -6,6 +6,7 @@ from nin_pipeline.sources.sap_text import (
     normalize_material,
     normalize_plant,
     parse_pipe_delimited_sap_export,
+    reorder_columns_pq_style,
     to_number,
 )
 
@@ -79,3 +80,20 @@ def test_normalize_plant_trims_and_uppercases():
 def test_normalize_material_strips_leading_zeros():
     series = pd.Series(["000123", " 456 ", "0000"])
     assert normalize_material(series).tolist() == ["123", "456", ""]
+
+
+def test_reorder_columns_pq_style_moves_listed_columns_front_and_keeps_extras():
+    """Matches real Table.ReorderColumns(..., MissingField.Ignore) semantics:
+    listed columns move to the front in the given order; unlisted columns
+    are NOT dropped, they're appended at the end in original order; listed
+    columns absent from the table are simply skipped."""
+    df = pd.DataFrame(
+        {
+            "A": [1],
+            "B": [2],
+            "C": [3],
+            "Extra": [4],
+        }
+    )
+    result = reorder_columns_pq_style(df, ["C", "A", "NotPresent"])
+    assert list(result.columns) == ["C", "A", "B", "Extra"]

@@ -20,6 +20,7 @@ from nin_pipeline.sources.sap_text import (
     normalize_material,
     normalize_plant,
     parse_pipe_delimited_sap_export,
+    reorder_columns_pq_style,
     to_number,
 )
 
@@ -38,10 +39,67 @@ NUMERIC_COLUMNS = (
     "Price Un",
 )
 
+# Column order for the cleaned (pre-enrichment) output, per
+# stg_prdpl3_clean.pq's `#"Reordered Columns"` step.
+CLEAN_COLUMN_ORDER = (
+    "plant_material_key",
+    "Plant",
+    "Material",
+    "Material Description",
+    "BUn",
+    "Product hierarchy",
+    "Basic material",
+    "Basic material 2",
+    "MRP Typ",
+    "MRP Controller",
+    "PuRGrp",
+    "DelFlag",
+    "MtlSt_XPlt",
+    "MtlSt_Plt",
+    "X-Chn Mtl St",
+    "SG",
+    "ProcType",
+    "Spec Proc",
+    "ABC",
+    "MTyp",
+    "IPT",
+    "PDT",
+    "GRT",
+    "TRLT",
+    "Planning time fence",
+    "LotSize",
+    "Min. Lot Sze",
+    "Rounding val.",
+    "Max. Lot Size",
+    "Fix. lot size",
+    "BUn_1",
+    "Safety Stock",
+    "Reorder Point",
+    "Threshold Qty",
+    "AvaiChk",
+    "Consumption mode",
+    "Bwd cons. per.",
+    "Fwd cons.period",
+    "BkFlush",
+    "PSloc",
+    "Language",
+    "Tot Valuated Stk",
+    "Total Value",
+    "Standard price",
+    "Price Un",
+    "SLife",
+    "Propos.SA",
+    "ESLoc",
+    "R. Profile",
+    "ProdS",
+)
+
 # Column order for the enriched/review output, per
-# docs/nin_data_contracts.md section 1. Columns not present in a given
-# extract are simply omitted rather than raising, mirroring
-# `MissingField.Ignore` in the source Power Query.
+# docs/nin_data_contracts.md section 1. Applied via
+# `reorder_columns_pq_style`, matching `Table.ReorderColumns(...,
+# MissingField.Ignore)`: entries absent from a given extract are skipped
+# (no error), and any extra column the extract *does* have that isn't
+# listed here is appended at the end rather than dropped.
 ENRICHED_COLUMN_ORDER = (
     "plant_material_key",
     "Plant",
@@ -133,6 +191,7 @@ def clean_prdpl3(path: Path, active_plant: str) -> pd.DataFrame:
     df = df.copy()
     df["plant_material_key"] = df["Plant"] + "-" + df["Material"]
 
+    df = reorder_columns_pq_style(df, list(CLEAN_COLUMN_ORDER))
     return df.reset_index(drop=True)
 
 
@@ -170,5 +229,4 @@ def enrich_prdpl3(
     df["source_plant"] = df["source_plant"].fillna("None defined")
     df = df.drop(columns=["source_key"])
 
-    ordered_columns = [c for c in ENRICHED_COLUMN_ORDER if c in df.columns]
-    return df[ordered_columns]
+    return reorder_columns_pq_style(df, list(ENRICHED_COLUMN_ORDER))

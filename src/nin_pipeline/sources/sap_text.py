@@ -18,6 +18,30 @@ import pandas as pd
 from nin_pipeline.ingestion import read_delimited_text
 
 
+def reorder_columns_pq_style(df: pd.DataFrame, order: list[str]) -> pd.DataFrame:
+    """Mirror `Table.ReorderColumns(df, order, MissingField.Ignore)`.
+
+    Power Query's `Table.ReorderColumns` does **not** drop columns absent
+    from `order`: any column present in the table but not listed keeps its
+    original relative position and is appended *after* the listed columns
+    (confirmed via Microsoft Learn docs -- "Columns that are not specified
+    in the list will not be reordered", i.e. not removed). Columns in
+    `order` that aren't present in `df` are simply skipped (the
+    `MissingField.Ignore` behavior).
+
+    This matters concretely for MB5T: the real raw header's `Amount LC`
+    column doesn't match `stg_mb5t_clean.pq`'s expected `"Amount in LC"`
+    name, so it's never renamed -- but it is *not* dropped by the real
+    `Table.ReorderColumns` step, it's simply appended at the end. A naive
+    `df[[c for c in order if c in df.columns]]` re-implementation would
+    silently drop it instead, which is a real behavioral difference from
+    production, not a faithfully-reproduced bug.
+    """
+    front = [c for c in order if c in df.columns]
+    remaining = [c for c in df.columns if c not in front]
+    return df[front + remaining]
+
+
 def _pad_or_truncate(row: list[str], width: int) -> list[str]:
     """Force a row to exactly `width` cells, mirroring the fixed `Columns=N`
     behavior of Power Query's `Csv.Document`."""

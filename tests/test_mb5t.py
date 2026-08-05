@@ -95,3 +95,35 @@ def test_enrich_mb5t_nulls_become_zero(tmp_path):
     result = enrich_mb5t(clean_df)
 
     assert result.iloc[0]["Quantity in Transit"] == 0
+
+
+def test_clean_mb5t_retains_unmatched_amount_lc_column_appended_at_end(tmp_path):
+    """Real SAP exports have a raw header literally reading "Amount LC"
+    (no "in"), which never matches stg_mb5t_clean.pq's expected
+    "Amount in LC" name. Table.ReorderColumns(..., MissingField.Ignore)
+    does NOT drop unlisted columns -- it appends them at the end -- so
+    "Amount LC" must survive in clean_mb5t's output, not be silently
+    dropped (see docs/nin_data_contracts.md Open Decision #5)."""
+    real_header = [h if h != "Amount in LC" else "Amount LC" for h in HEADER]
+
+    def _real_row(overrides):
+        values = {name: "" for name in real_header}
+        values.update(overrides)
+        return "|" + "|".join(values[name] for name in real_header) + "|"
+
+    path = tmp_path / "MB5T_export.txt"
+    lines = [f"BANNER LINE {i}" for i in range(3)]
+    lines.append(_real_row(dict(zip(real_header, real_header))))
+    lines.append(_real_row({}))
+    lines.append(
+        _real_row({"Plnt": "US01", "Material": "000123", "Amount LC": "129,055.20"})
+    )
+    path.write_text("\n".join(lines), encoding="cp1252")
+
+    result = clean_mb5t(path, active_plant="US01")
+
+    assert "Amount LC" in result.columns
+    assert "Amount in LC" not in result.columns
+    # Not dropped: appended after all CLEAN_COLUMN_ORDER columns.
+    assert list(result.columns)[-1] == "Amount LC"
+    assert result.iloc[0]["Amount LC"] == "129,055.20"
