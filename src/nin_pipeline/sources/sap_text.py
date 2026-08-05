@@ -65,6 +65,25 @@ def parse_pipe_delimited_sap_export(
         [cell.strip() for cell in row] for row in body[1 + skip_after_header :]
     ]
 
+    duplicates = {name for name in header if name and header.count(name) > 1}
+    if duplicates:
+        # SAP's pipe export displays the header text within the same fixed
+        # column width as the data, so two distinct fields can be truncated
+        # down to an identical visible name (observed in real MB5T exports,
+        # e.g. two columns both showing as "Quantity"). Power Query's
+        # `Csv.Document`/`Table.PromoteHeaders` behavior for this exact case
+        # is not confirmed, so this is raised loudly instead of silently
+        # colliding into a single duplicated-name column (which would make
+        # `df[column]` return a DataFrame instead of a Series downstream).
+        # See docs/nin_data_contracts.md "Open Decisions Assumed" for
+        # follow-up.
+        raise ValueError(
+            f"Duplicate column header(s) {sorted(duplicates)} found while "
+            f"parsing {path}. Confirm with the SAP export's true field "
+            "names (the header row may be truncated to the data column "
+            "width) before proceeding."
+        )
+
     return pd.DataFrame(data_rows, columns=header, dtype="string")
 
 
