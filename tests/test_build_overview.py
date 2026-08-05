@@ -232,3 +232,90 @@ def test_assemble_nin_base_table_missing_doh_row_defaults_demand_to_zero():
     # Available Stock = max(0, 200 - 0) = 200
     assert row["Available Stock"] == 200
     assert row["DOH"] == 0
+
+
+def test_assemble_nin_base_table_joins_rec_weekly_forecast_and_defaults_missing_to_zero():
+    """rec_weekly (Total Forecast (Qty)/week 1..week N, from
+    pivot_mrp_elements_rec_weekly) is optional and, when given, is
+    left-joined with unmatched keys defaulting to 0 -- matching the real
+    Excel workbook's SUMIFS matrix."""
+    overview_p1 = assemble_overview_p1(make_prdpl3_enriched())
+    doh_pivot = pd.DataFrame(
+        columns=[
+            "plant_material_key",
+            "Material No.",
+            "Plant",
+            "WB",
+            "VJ",
+            "VC",
+            "VG",
+            "PP",
+            "U1",
+            "U2",
+        ]
+    )
+    mb5t_enriched = pd.DataFrame(columns=["plant_material_key", "Quantity in Transit"])
+    bobl_enriched = pd.DataFrame(
+        columns=[
+            "plant_material_key",
+            "Backorder Actual",
+            "Backorder Qnty",
+            "Backlog Actual",
+            "Backlog Qnty",
+        ]
+    )
+    # Only "US01-123" (the surviving, non-deleted row) has REC forecast data.
+    rec_weekly = pd.DataFrame(
+        [
+            {
+                "plant_material_key": "US01-123",
+                "Total Forecast (Qty)": 15.0,
+                "week 1": 10.0,
+                "week 2": 5.0,
+            }
+        ]
+    )
+
+    result = assemble_nin_base_table(
+        overview_p1, doh_pivot, mb5t_enriched, bobl_enriched, rec_weekly=rec_weekly
+    )
+    row = result.iloc[0]
+    assert row["Total Forecast (Qty)"] == 15.0
+    assert row["week 1"] == 10.0
+    assert row["week 2"] == 5.0
+
+
+def test_assemble_nin_base_table_without_rec_weekly_omits_weekly_columns():
+    """rec_weekly defaults to None, keeping full backward compatibility for
+    callers that don't yet supply REC data."""
+    overview_p1 = assemble_overview_p1(make_prdpl3_enriched())
+    doh_pivot = pd.DataFrame(
+        columns=[
+            "plant_material_key",
+            "Material No.",
+            "Plant",
+            "WB",
+            "VJ",
+            "VC",
+            "VG",
+            "PP",
+            "U1",
+            "U2",
+        ]
+    )
+    mb5t_enriched = pd.DataFrame(columns=["plant_material_key", "Quantity in Transit"])
+    bobl_enriched = pd.DataFrame(
+        columns=[
+            "plant_material_key",
+            "Backorder Actual",
+            "Backorder Qnty",
+            "Backlog Actual",
+            "Backlog Qnty",
+        ]
+    )
+
+    result = assemble_nin_base_table(
+        overview_p1, doh_pivot, mb5t_enriched, bobl_enriched
+    )
+    assert "Total Forecast (Qty)" not in result.columns
+    assert "week 1" not in result.columns

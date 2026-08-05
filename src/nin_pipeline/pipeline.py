@@ -30,6 +30,12 @@ from nin_pipeline.sources.mrp_elements_doh import (
     locate_latest_doh_file,
     pivot_mrp_elements_doh,
 )
+from nin_pipeline.sources.mrp_elements_rec import (
+    clean_mrp_elements_rec,
+    enrich_mrp_elements_rec,
+    locate_latest_rec_file,
+    pivot_mrp_elements_rec_weekly,
+)
 from nin_pipeline.sources.prdpl3 import clean_prdpl3, enrich_prdpl3
 
 # Convention for this Python port: BOBL's PowerBI matrix export is saved as
@@ -56,13 +62,17 @@ def run_pipeline(config: PipelineConfig, run_id: str | None = None) -> PipelineR
     Steps (see docs/NIN_Python_Plan.md sections 9-11):
 
     1. Load reference/tag data and determine the single active plant.
-    2. Discover and parse the latest PRDPL3, MB5T, and MRP_ELEMENTS_DOH
-       exports for that plant (MRP_ELEMENTS_REC is intentionally not
-       processed here -- it is out of scope for the final base table, per
-       docs/nin_data_contracts.md Open Decision #1).
+    2. Discover and parse the latest PRDPL3, MB5T, MRP_ELEMENTS_DOH, and
+       MRP_ELEMENTS_REC exports for that plant. REC's per-week
+       requirement rows are transposed into `Total Forecast (Qty)`/
+       `week 1`..`week 27` columns (see
+       `nin_pipeline.sources.mrp_elements_rec.pivot_mrp_elements_rec_weekly`)
+       -- per docs/nin_data_contracts.md Open Decision #1 (updated), this
+       join has no `.pq` equivalent; the real final Excel workbook builds
+       it with a native SUMIFS formula matrix, confirmed by SME.
     3. Load and shape the BOBL export.
     4. Assemble `build_overview_p1` from enriched PRDPL3, then the final
-       `nin_base_table` by joining DOH/MB5T/BOBL.
+       `nin_base_table` by joining DOH/MB5T/BOBL/REC-weekly.
     5. Write a run manifest recording the selected source files and row
        counts, per docs/NIN_Python_Plan.md section 10.
     """
@@ -91,13 +101,24 @@ def run_pipeline(config: PipelineConfig, run_id: str | None = None) -> PipelineR
     )
     doh_pivot = pivot_mrp_elements_doh(doh_clean)
 
+    rec_file, rec_run_folder = locate_latest_rec_file(paths.mrp_rec_folder, plant=plant)
+    rec_clean = clean_mrp_elements_rec(
+        rec_file, run_folder_name=rec_run_folder, active_plant=plant
+    )
+    rec_enriched = enrich_mrp_elements_rec(rec_clean, reference_data.rec_req_type)
+    rec_weekly = pivot_mrp_elements_rec_weekly(rec_enriched)
+
     bobl_raw = pd.read_csv(paths.reference_data_folder / BOBL_FILENAME, dtype="string")
     bobl_clean = clean_bobl(bobl_raw)
     bobl_enriched = enrich_bobl(bobl_clean)
 
     overview_p1 = assemble_overview_p1(prdpl3_enriched)
     base_table = assemble_nin_base_table(
-        overview_p1, doh_pivot, mb5t_enriched, bobl_enriched
+        overview_p1,
+        doh_pivot,
+        mb5t_enriched,
+        bobl_enriched,
+        rec_weekly=rec_weekly,
     )
 
     manifest_path = _write_manifest(
@@ -105,13 +126,13 @@ def run_pipeline(config: PipelineConfig, run_id: str | None = None) -> PipelineR
         run_id=run_id,
         sources={
             "prdpl3": str(prdpl3_file),
-            "mrp_rec": None,
+            "mrp_rec": str(rec_file),
             "mrp_doh": str(doh_file),
             "mb5t": str(mb5t_file),
         },
         row_counts={
             "prdpl3_raw": len(prdpl3_clean),
-            "mrp_rec_raw": 0,
+            "mrp_rec_raw": len(rec_clean),
             "mrp_doh_raw": len(doh_clean),
             "mb5t_raw": len(mb5t_clean),
             "nin_base_table": len(base_table),

@@ -3,9 +3,11 @@
 import pandas as pd
 
 from nin_pipeline.sources.mrp_elements_rec import (
+    WEEKLY_FORECAST_WEEK_COUNT,
     clean_mrp_elements_rec,
     enrich_mrp_elements_rec,
     locate_latest_rec_file,
+    pivot_mrp_elements_rec_weekly,
 )
 
 HEADER = [
@@ -160,3 +162,76 @@ def test_enrich_mrp_elements_rec_defaults_to_not_negative_when_unmatched(tmp_pat
     row = result.iloc[0]
     assert row["Signed Adj Req Qty"] == 10  # default not-negative -> positive
     assert row["Adj Req Qty"] == 10
+
+
+def test_pivot_mrp_elements_rec_weekly_transposes_by_earliest_distinct_dates():
+    """Mirrors the real Excel workbook's SUMIFS matrix (no .pq equivalent,
+    confirmed by SME): "week 1" is the earliest distinct Week Ending date
+    across the whole REC output, "week 2" the next, and so on; each cell
+    sums Adj Req Qty for that key/week, and Total Forecast (Qty) sums only
+    the forced week columns."""
+    enriched = pd.DataFrame(
+        {
+            "plant_material_key": ["US01-123", "US01-123", "US01-456"],
+            "Week Ending": [
+                pd.Timestamp("2026-03-06"),  # earliest -> week 1
+                pd.Timestamp("2026-03-13"),  # next -> week 2
+                pd.Timestamp("2026-03-06"),  # same date as week 1
+            ],
+            "Adj Req Qty": [10.0, 5.0, 3.0],
+        }
+    )
+
+    result = pivot_mrp_elements_rec_weekly(enriched, week_count=3)
+
+    assert list(result.columns) == [
+        "plant_material_key",
+        "Total Forecast (Qty)",
+        "week 1",
+        "week 2",
+        "week 3",
+    ]
+    row_123 = result.loc[result["plant_material_key"] == "US01-123"].iloc[0]
+    assert row_123["week 1"] == 10.0
+    assert row_123["week 2"] == 5.0
+    assert row_123["week 3"] == 0
+    assert row_123["Total Forecast (Qty)"] == 15.0
+
+    row_456 = result.loc[result["plant_material_key"] == "US01-456"].iloc[0]
+    assert row_456["week 1"] == 3.0
+    assert row_456["week 2"] == 0
+    assert row_456["Total Forecast (Qty)"] == 3.0
+
+
+def test_pivot_mrp_elements_rec_weekly_ignores_dates_beyond_week_count():
+    """Any REC demand in weeks past `week_count` is excluded entirely from
+    Total Forecast (Qty), matching the real workbook's fixed-width matrix."""
+    enriched = pd.DataFrame(
+        {
+            "plant_material_key": ["US01-123", "US01-123"],
+            "Week Ending": [pd.Timestamp("2026-03-06"), pd.Timestamp("2026-03-13")],
+            "Adj Req Qty": [10.0, 999.0],
+        }
+    )
+
+    result = pivot_mrp_elements_rec_weekly(enriched, week_count=1)
+
+    assert list(result.columns) == [
+        "plant_material_key",
+        "Total Forecast (Qty)",
+        "week 1",
+    ]
+    row = result.iloc[0]
+    assert row["week 1"] == 10.0
+    assert row["Total Forecast (Qty)"] == 10.0  # 999.0 in week 2 excluded
+
+
+def test_pivot_mrp_elements_rec_weekly_forces_all_columns_when_empty():
+    empty = pd.DataFrame(columns=["plant_material_key", "Week Ending", "Adj Req Qty"])
+    result = pivot_mrp_elements_rec_weekly(empty)
+
+    assert len(result) == 0
+    expected_columns = ["plant_material_key", "Total Forecast (Qty)"] + [
+        f"week {i}" for i in range(1, WEEKLY_FORECAST_WEEK_COUNT + 1)
+    ]
+    assert list(result.columns) == expected_columns

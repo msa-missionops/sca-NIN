@@ -7,10 +7,13 @@ docs/NIN_Python_Plan.md section 7.6 and the schema in
 docs/nin_data_contracts.md section 4.
 
 MRP_ELEMENTS_REC produces a weekly-grain signed requirement forecast. Per
-docs/NIN_Python_Plan.md section 7.6.1, this output is **not currently joined
-into the final base table** -- it is defined here for completeness and for
-any future weekly-forecast view, not because Phase 1 requires it in
-`nin_base_table`.
+docs/nin_data_contracts.md Open Decision #1 (updated), this output *is*
+joined into the final base table via `pivot_mrp_elements_rec_weekly` below
+-- but not through any `.pq` step. The real final Excel workbook builds the
+`Total Forecast (Qty)`/`week 1`..`week 27` columns with a native Excel
+SUMIFS formula matrix that has no Power Query equivalent (confirmed by
+SME; see docs/design_reference/"output headers.csv" and the "output Excel
+part *.png" screenshots).
 """
 
 from __future__ import annotations
@@ -162,3 +165,61 @@ def enrich_mrp_elements_rec(
         ["plant_material_key", "Week Ending", "Adj Req Qty", "Signed Adj Req Qty"]
     ].sort_values(["plant_material_key", "Week Ending"], kind="stable")
     return result.reset_index(drop=True)
+
+
+WEEKLY_FORECAST_WEEK_COUNT = 27
+
+
+def pivot_mrp_elements_rec_weekly(
+    enriched_df: pd.DataFrame, week_count: int = WEEKLY_FORECAST_WEEK_COUNT
+) -> pd.DataFrame:
+    """Transpose enriched MRP_ELEMENTS_REC into one row per
+    `plant_material_key` with `week 1`..`week <week_count>` columns plus a
+    `Total Forecast (Qty)` column, matching the final Excel workbook's
+    SUMIFS-based matrix (see module docstring -- this has no `.pq`
+    equivalent; confirmed by SME).
+
+    Rules (confirmed by SME against the real workbook):
+
+    - "week 1" is the *earliest* distinct `Week Ending` date present
+      anywhere in the REC output (across all `plant_material_key`s), not a
+      calendar/fiscal week number and not relative to today's date;
+      "week 2" is the next earliest distinct date, and so on, through the
+      `week_count`-th distinct date. Every `plant_material_key` shares the
+      same week-to-column date mapping.
+    - Each `week N` cell is the SUMIFS-equivalent sum of `Adj Req Qty` for
+      that `plant_material_key` and that week's date (0 if no matching
+      rows).
+    - `Total Forecast (Qty)` is the row-wise sum of `week 1`..
+      `week <week_count>` **only** -- any REC demand in weeks beyond
+      `week_count` is not represented anywhere in the final output,
+      matching the real workbook's fixed-width column matrix.
+    """
+    week_columns = [f"week {i}" for i in range(1, week_count + 1)]
+
+    if enriched_df.empty:
+        pivot = pd.DataFrame(columns=["plant_material_key"])
+    else:
+        distinct_weeks = sorted(enriched_df["Week Ending"].dropna().unique())[
+            :week_count
+        ]
+        pivot = enriched_df.pivot_table(
+            index="plant_material_key",
+            columns="Week Ending",
+            values="Adj Req Qty",
+            aggfunc="sum",
+            fill_value=0,
+        )
+        pivot = pivot.reindex(columns=distinct_weeks, fill_value=0)
+        pivot.columns = [f"week {i + 1}" for i in range(len(distinct_weeks))]
+        pivot = pivot.reset_index()
+
+    for column in week_columns:
+        if column not in pivot.columns:
+            pivot[column] = 0
+
+    pivot["Total Forecast (Qty)"] = pivot[week_columns].sum(axis=1)
+
+    return pivot[
+        ["plant_material_key", "Total Forecast (Qty)", *week_columns]
+    ].reset_index(drop=True)

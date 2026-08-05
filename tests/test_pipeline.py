@@ -118,6 +118,24 @@ def write_doh_export(path, data_rows):
     path.write_text("\n".join(lines), encoding="cp1252")
 
 
+REC_HEADER = [
+    "Plnt",
+    "Material",
+    "El",
+    "Customer Request Date",
+    "Rec./reqd.qty",
+    "BUn",
+]
+
+
+def write_rec_export(path, data_rows):
+    lines = ["Banner text 0", "Banner text 1", ""]
+    lines.append("\t".join(REC_HEADER))
+    for row in data_rows:
+        lines.append("\t".join(row.get(col, "") for col in REC_HEADER))
+    path.write_text("\n".join(lines), encoding="cp1252")
+
+
 def write_reference_data(folder):
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "region.csv").write_text("Plant,Region\nUS01,Northeast\n")
@@ -195,6 +213,30 @@ def test_run_pipeline_assembles_base_table_end_to_end(tmp_path):
         ],
     )
 
+    rec_run_folder = tmp_path / "mrp_rec" / "20260201_run"
+    rec_run_folder.mkdir(parents=True)
+    write_rec_export(
+        rec_run_folder / "MM_MRP_ELEMENTS_REC_20260201_US01_x.txt",
+        [
+            {
+                "Plnt": "US01",
+                "Material": "000123",
+                "El": "VJ",
+                "Customer Request Date": "2026-12-04",  # Friday -> week 1
+                "Rec./reqd.qty": "10",
+                "BUn": "EA",
+            },
+            {
+                "Plnt": "US01",
+                "Material": "000123",
+                "El": "VJ",
+                "Customer Request Date": "2026-12-11",  # next Friday -> week 2
+                "Rec./reqd.qty": "5",
+                "BUn": "EA",
+            },
+        ],
+    )
+
     write_reference_data(tmp_path / "reference_data")
 
     config = make_config(tmp_path)
@@ -210,10 +252,19 @@ def test_run_pipeline_assembles_base_table_end_to_end(tmp_path):
     assert row["Backorder Actual"] == 1
     assert row["Backlog Qnty"] == 3
 
+    # Weekly REC forecast transpose: week 1 = earliest Week Ending (10),
+    # week 2 = next (5), remaining weeks default to 0, Total Forecast (Qty)
+    # = sum of week 1..27 only.
+    assert row["week 1"] == 10
+    assert row["week 2"] == 5
+    assert row["week 3"] == 0
+    assert row["Total Forecast (Qty)"] == 15
+
     assert result.manifest_path.exists()
     manifest = pd.read_json(result.manifest_path, typ="series")
     assert manifest["run_id"] == "20260201_000000"
     assert manifest["row_counts"]["nin_base_table"] == 1
+    assert manifest["row_counts"]["mrp_rec_raw"] == 2
 
     output_folder = tmp_path / "output"
     assert (output_folder / "nin_base_table.csv").exists()

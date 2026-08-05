@@ -10,15 +10,22 @@ PRDPL3 (already shaped by ``nin_pipeline.sources.prdpl3.enrich_prdpl3``) is
 the anchor grain, one row per ``plant_material_key``. MRP_ELEMENTS_DOH's
 pivoted output, MB5T's aggregated in-transit quantity, and BOBL's
 aggregated backorder/backlog measures are then left-joined onto it.
-MRP_ELEMENTS_REC is intentionally **not** joined here -- per
-``docs/nin_data_contracts.md`` Open Decision #1, it is out of scope for
-the final base table in the current production query and in this port.
+
+MRP_ELEMENTS_REC's weekly forecast (``Total Forecast (Qty)``/``week 1``..
+``week 27``, from
+``nin_pipeline.sources.mrp_elements_rec.pivot_mrp_elements_rec_weekly``) is
+also left-joined here, matching the real final Excel workbook -- per
+``docs/nin_data_contracts.md`` Open Decision #1 (updated), this join has no
+``.pq`` equivalent: production builds it with a native Excel SUMIFS formula
+matrix, not Power Query.
 """
 
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+
+from nin_pipeline.sources.mrp_elements_rec import WEEKLY_FORECAST_WEEK_COUNT
 
 # Column order for `build_overview_p1_review`, per the
 # `#"Removed Other Columns"` step of build_overview_p1_enriched.pq.
@@ -112,6 +119,8 @@ BASE_TABLE_COLUMN_ORDER = (
     "Backorder Qnty",
     "Backlog Actual",
     "Backlog Qnty",
+    "Total Forecast (Qty)",
+    *(f"week {i}" for i in range(1, WEEKLY_FORECAST_WEEK_COUNT + 1)),
 )
 
 
@@ -135,6 +144,7 @@ def assemble_nin_base_table(
     doh_pivot: pd.DataFrame,
     mb5t_enriched: pd.DataFrame,
     bobl_enriched: pd.DataFrame,
+    rec_weekly: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Assemble `nin_base_table` (`build_overview_p2_review`).
 
@@ -155,6 +165,14 @@ def assemble_nin_base_table(
        (not rounded).
     8. Left-join BOBL's backorder/backlog measures (stay null if
        unmatched -- no default-to-zero in the source for these columns).
+    9. If `rec_weekly` is given (see
+       `nin_pipeline.sources.mrp_elements_rec.pivot_mrp_elements_rec_weekly`),
+       left-join `Total Forecast (Qty)`/`week 1`..`week 27` on
+       `plant_material_key`, defaulting unmatched rows to 0 -- matching the
+       real Excel workbook's SUMIFS matrix, which naturally evaluates to 0
+       for a key with no REC rows. `rec_weekly` is optional (defaults to
+       `None`, omitting these columns entirely) since it has no `.pq`
+       equivalent and REC is not yet wired into every caller.
     """
     df = overview_p1.copy()
     df = df[df["DelFlag"].astype("string").fillna("") == ""].copy()
@@ -203,6 +221,12 @@ def assemble_nin_base_table(
         on="plant_material_key",
         how="left",
     )
+
+    if rec_weekly is not None:
+        df = df.merge(rec_weekly, on="plant_material_key", how="left")
+        rec_columns = [c for c in rec_weekly.columns if c != "plant_material_key"]
+        for col in rec_columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
     ordered = [c for c in BASE_TABLE_COLUMN_ORDER if c in df.columns]
     return df[ordered].reset_index(drop=True)
