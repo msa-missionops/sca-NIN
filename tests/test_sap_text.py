@@ -33,6 +33,36 @@ def test_parse_pipe_delimited_sap_export_skips_banner_and_promotes_header(
     assert df.iloc[1]["Material"] == "456"
 
 
+def test_parse_pipe_delimited_sap_export_renumbers_duplicate_headers(tmp_path):
+    """Mirrors Power Query's Table.PromoteHeaders behavior confirmed against
+    real captured exports: the first occurrence of a duplicated name is
+    left unchanged, and every subsequent duplicate anywhere in the row
+    (regardless of which name it duplicates) is suffixed with a single
+    table-wide running counter -- e.g. stg_mb5t_clean.pq's raw header has
+    "Quantity" and "Crcy" each appear twice, and expects them typed as
+    "Quantity"/"Quantity_1" and "Crcy"/"Crcy_2" (not "Crcy_1")."""
+    path = tmp_path / "export.txt"
+    lines = [
+        "banner 1",
+        "|BUn|Quantity|Crcy|Quantity|Net Value|Crcy|",
+        "|EA|10|USD|20|5.00|MXN|",
+    ]
+    path.write_text("\n".join(lines), encoding="cp1252")
+
+    df = parse_pipe_delimited_sap_export(path, total_columns=8, skip_before_header=1)
+
+    assert list(df.columns) == [
+        "BUn",
+        "Quantity",
+        "Crcy",
+        "Quantity_1",
+        "Net Value",
+        "Crcy_2",
+    ]
+    assert df.iloc[0]["Quantity_1"] == "20"
+    assert df.iloc[0]["Crcy_2"] == "MXN"
+
+
 def test_to_number_strips_thousands_separator():
     series = pd.Series(["1,200", "300", "", None])
     result = to_number(series)

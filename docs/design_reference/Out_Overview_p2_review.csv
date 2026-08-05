@@ -1,0 +1,49 @@
+plant_material_key
+Region
+Plant
+Major PG
+Product hierarchy
+Material
+Material Description
+Source Plant
+Safety Stock
+BUn
+top_60_flag
+ABC
+Spec Proc
+ProcType
+TRLT
+Total Stock Quantity
+Stocked Status
+Total Value Stock on Hand
+Basic material
+MRP Typ
+MRP Controller
+DelFlag
+SG
+MTyp
+IPT
+PDT
+GRT
+Planning time fence
+LotSize
+Reorder Point
+Threshold Qty
+AvaiChk
+Standard price
+Price Un
+WB
+VJ
+VC
+VG
+PP
+U1
+U2
+Quantity in Transit
+Available Stock
+Average Monthly Forecast Demand
+DOH
+Backorder Actual
+Backorder Qnty
+Backlog Actual
+Backlog Qnty

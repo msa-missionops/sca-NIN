@@ -26,6 +26,34 @@ def _pad_or_truncate(row: list[str], width: int) -> list[str]:
     return row[:width]
 
 
+def _dedupe_header_power_query_style(header: list[str]) -> list[str]:
+    """Rename duplicate header cells the way Power Query's
+    `Table.PromoteHeaders` does: the first occurrence of a name is left
+    unchanged, and every subsequent duplicate (regardless of which name it
+    duplicates) is suffixed with a single table-wide running counter
+    (`_1`, `_2`, `_3`, ...) in left-to-right order.
+
+    Confirmed against two real captured exports: `stg_prdpl3_clean.pq`
+    expects the raw header's second "BUn" to become "BUn_1", and
+    `stg_mb5t_clean.pq` expects the raw header's second "Quantity" to
+    become "Quantity_1" *and* its second "Crcy" to become "Crcy_2" (not
+    "Crcy_1") -- only a single global counter (rather than a separate
+    counter per duplicated name) produces that exact numbering.
+    """
+    seen: set[str] = set()
+    counter = 0
+    result: list[str] = []
+    for name in header:
+        if name and name in seen:
+            counter += 1
+            result.append(f"{name}_{counter}")
+        else:
+            if name:
+                seen.add(name)
+            result.append(name)
+    return result
+
+
 def parse_pipe_delimited_sap_export(
     path: Path,
     total_columns: int,
@@ -43,7 +71,9 @@ def parse_pipe_delimited_sap_export(
        leading/trailing delimiter on each line).
     3. Skip `skip_before_header` banner/metadata rows.
     4. Trim all remaining cells.
-    5. Promote the next row to the column header.
+    5. Promote the next row to the column header, renaming any duplicate
+       header cell to match Power Query's `Table.PromoteHeaders` numbering
+       (see `_dedupe_header_power_query_style`).
     6. Skip `skip_after_header` further rows (e.g. a units/blank row).
 
     No type conversion, renaming, filtering, or key-building is performed
@@ -60,29 +90,10 @@ def parse_pipe_delimited_sap_export(
             f"No rows remain after skipping {skip_before_header} banner rows: {path}"
         )
 
-    header = [cell.strip() for cell in body[0]]
+    header = _dedupe_header_power_query_style([cell.strip() for cell in body[0]])
     data_rows = [
         [cell.strip() for cell in row] for row in body[1 + skip_after_header :]
     ]
-
-    duplicates = {name for name in header if name and header.count(name) > 1}
-    if duplicates:
-        # SAP's pipe export displays the header text within the same fixed
-        # column width as the data, so two distinct fields can be truncated
-        # down to an identical visible name (observed in real MB5T exports,
-        # e.g. two columns both showing as "Quantity"). Power Query's
-        # `Csv.Document`/`Table.PromoteHeaders` behavior for this exact case
-        # is not confirmed, so this is raised loudly instead of silently
-        # colliding into a single duplicated-name column (which would make
-        # `df[column]` return a DataFrame instead of a Series downstream).
-        # See docs/nin_data_contracts.md "Open Decisions Assumed" for
-        # follow-up.
-        raise ValueError(
-            f"Duplicate column header(s) {sorted(duplicates)} found while "
-            f"parsing {path}. Confirm with the SAP export's true field "
-            "names (the header row may be truncated to the data column "
-            "width) before proceeding."
-        )
 
     return pd.DataFrame(data_rows, columns=header, dtype="string")
 
