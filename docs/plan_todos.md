@@ -6,6 +6,7 @@ Current tracked todos (created 2026-08-04):
 
 - immediate-save-dev-snapshot — Immediate: Save development raw SAP snapshot — in_progress
 - immediate-create-repo-and-venv — Immediate: Create repository and virtualenv — pending
+- capture-raw-snapshot — Future: Capture raw SAP files into test_data/raw — pending
 
 Phase 1 tasks:
 - phase-1a-current-state-mapping — Document current Power Query transformations — pending
