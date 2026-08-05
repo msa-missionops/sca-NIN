@@ -1,0 +1,31 @@
+# Sample pipeline configuration.
+#
+# Copy this file (e.g. to config/settings.yaml) and update the paths for
+# your environment, then run:
+#
+#   python -m nin_pipeline run --config config/settings.local.yaml
+#
+# See docs/NIN_Python_Plan.md section 8 for the full configuration
+# strategy, and docs/nin_data_contracts.md for the reference-data file
+# formats expected under `paths.reference_data_folder`
+# (region.csv, top60.csv, sourceplant.csv, rec_req_type.csv,
+# plant_evaluation.csv, bobl.csv).
+
+paths:
+  prdpl3_folder: "\\\\filer3\\power_bi$\\GSP\\NIN\\output\\PRDPL3"
+  mrp_rec_folder: "\\\\filer3\\power_bi$\\GSP\\NIN\\output\\MRP_REC"
+  mrp_doh_folder: "\\\\filer3\\power_bi$\\GSP\\NIN\\output\\MRP_DOH"
+  mb5t_folder: "\\\\filer3\\power_bi$\\GSP\\NIN\\output\\MB5T"
+  reference_data_folder: "./reference_data"
+  output_folder: "./output"
+  run_folder: "./runs"
+  log_folder: "./logs"
+
+file_selection:
+  strategy: latest_modified
+  ignore_hidden: true
+
+output:
+  write_parquet: true
+  write_csv: true
+  write_excel: true

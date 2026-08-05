@@ -4,6 +4,12 @@ version = "0.1.0"
 description = "NIN Python rebuild - transformation layer"
 readme = "README.md"
 requires-python = ">=3.9"
+dependencies = [
+    "pandas>=2.0",
+    "pyarrow>=11.0",
+    "openpyxl>=3.1",
+    "PyYAML>=6.0",
+]
 
 [tool.poetry]
 
