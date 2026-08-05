@@ -420,6 +420,165 @@ Each reference source should have:
 
 ---
 
+## 7.6 Confirmed Current-State Data Flow (Power Query)
+
+This section replaces the "likely/expected" language above with the flow actually
+implemented in `docs/powerquery_m/`. Every group follows the same three-stage
+naming convention:
+
+```text
+stg_<group>_clean      -- source read + row-level normalization
+stg_<group>_enriched   -- (or *_pivot) group-level aggregation / lookups
+out_<group>_review     -- pass-through interface query (stable name for downstream joins)
+```
+
+### 7.6.1 Dependency graph
+
+```text
+plant_evaluation (single active Plant, Evaluate = TRUE)
+        |
+        +--> stg_prdpl3_clean --> stg_prdpl3_enriched --> out_prdpl3_review
+        |         (joins tbl_tag_region, tbl_tag_top60, tbl_tag_sourceplant)
+        |
+        +--> stg_mb5t_clean --> stg_mb5t_enriched --> out_mb5t_review
+        |
+        +--> stg_mm_mrp_elements_doh_clean --> stg_mm_mrp_elements_doh_pivot --> out_mm_mrp_elements_doh_review
+        |
+        +--> stg_mm_mrp_elements_rec_clean --> stg_mm_mrp_elements_rec_enriched --> out_mm_mrp_elements_rec_review
+        |         (weekly grain: plant_material_key, Week Ending, Adj Req Qty)
+        |
+        +--> stg_bobl_clean --> stg_bobl_enriched --> out_bobl_review
+                  (Source = Table_BOBL, a pasted PowerBI matrix export, not a SAP flat file)
+
+out_prdpl3_review
+        --> build_overview_p1_clean --> build_overview_p1_enriched --> build_overview_p1_review
+                --> build_overview_p2_clean --> build_overview_p2_enriched --> build_overview_p2_review
+                        (left-joins out_mm_mrp_elements_doh_review, out_mb5t_review, out_bobl_review
+                         onto the PRDPL3-anchored grain)
+```
+
+`build_overview_p2_review` is the final table currently handed to the Excel workbook —
+this is the table the Python `nin_base_table` must reproduce.
+
+**Important:** `out_mm_mrp_elements_rec_review` (the weekly REC forecast) is **not**
+joined anywhere in `build_overview_p2_enriched`. It is a standalone weekly-grain
+output, presumably feeding a separate trend/forecast view in the workbook, not the
+NIN base table. Section 13/14 below should not assume REC feeds the base table
+until confirmed with the SME.
+
+### 7.6.2 Per-source confirmed behavior
+
+**PRDPL3** (`docs/powerquery_m/prdpl3/`)
+- Single latest file per `Folder.Files` (no run-subfolder), pipe-delimited, 51 columns.
+- Filters to the single active plant (`plant_evaluation`) and to
+  `Product hierarchy` starting with `"00020"`.
+- `plant_material_key = Upper(Trim(Plant)) & "-" & TrimLeadingZeros(Upper(Trim(Material)))`.
+- Enrichment left-joins three reference tags: `tbl_tag_region` (Region),
+  `tbl_tag_top60` (top_60_flag, default `"standard"`), `tbl_tag_sourceplant`
+  keyed on normalized `Spec Proc` (source_plant, default `"None defined"`).
+
+**MB5T** (`docs/powerquery_m/mb5t/`)
+- Single latest file (no run-subfolder), pipe-delimited, 18 columns.
+- Filtered to the active plant; retains a vestigial `Group` column
+  (always null — the comment in `stg_mb5t_clean.pq` confirms the earlier
+  defined-set grouping was removed but the column was kept for shape compatibility).
+- Enrichment aggregates `Quantity` by `plant_material_key` (`qnt_sum`), null -> 0.
+- Review renames `qnt_sum` -> `"Quantity in Transit"`.
+
+**MRP_ELEMENTS_DOH** (`docs/powerquery_m/mm_mrp_elements_doh/`)
+- Finds the **latest run subfolder** under the configured output root, then the
+  latest file within it matching the active plant. Tab-delimited; SAP header row
+  is located dynamically by scanning for a row containing `Plnt`, `Material`, `El`.
+- Null `Requirements Date` is replaced with the file's `Date created` (as-of date);
+  rows with `Requirements Date < as-of date` are dropped (forward-looking only).
+- `Week Ending` = next Friday on/after `Requirements Date`.
+- Business rule: `Adj Req Qty = Req. Qty. / 2` when `Requirements Type = "BB"`,
+  otherwise unchanged (no sign flip — unlike REC, below).
+- Pivot stage groups by `Material No./Plant/Requirements Type`, sums `Adj Req Qty`,
+  then pivots `Requirements Type` values into columns. It force-adds 6 expected
+  columns (`WB, PP, U2, VC, VJ, U1`) defaulting to 0 if the source data doesn't
+  produce them.
+  **Risk:** `build_overview_p2_enriched` expands **7** columns
+  (`WB, PP, U2, VC, VJ, VG, U1` — note `VG`), but the pivot's safety-net list only
+  covers 6 and omits `VG`. If a run's data never produces a `VG` pivot column,
+  the downstream `Table.ExpandTableColumn` in `build_overview_p2_enriched` will
+  error. This must be reproduced deliberately (either as a hard dependency on `VG`
+  always existing, or fixed) — flag for SME confirmation.
+
+**MRP_ELEMENTS_REC** (`docs/powerquery_m/mm_mrp_elements_rec/`)
+- Same run-subfolder/plant-file selection and dynamic-header logic as DOH.
+- Filters to `Requirements Date >= as-of date`; computes `Week Ending` the same way.
+- Enrichment joins a `rec_req_type` sign table (`type -> negative` flag, default
+  `false`) to compute `Adj Req Qty = ±Abs(Req. Qty.)`.
+  **Note/possible bug:** the very last step of `stg_mm_mrp_elements_rec_enriched.pq`
+  (`AbsAdjReqQty`) re-applies `Number.Abs()` to `Adj Req Qty`, which discards the
+  sign just computed. The exposed output (`out_mm_mrp_elements_rec_review`) is
+  therefore always non-negative regardless of the requirement-type sign lookup.
+  Confirm with SME whether this is intentional before the Python port reproduces
+  it "as-is" vs. "as-designed" (signed).
+- Output grain: `plant_material_key, Week Ending, Adj Req Qty` (weekly). Not
+  currently joined into `build_overview_p2_enriched` (see 7.6.1).
+
+**BOBL** (`docs/powerquery_m/BOBL/`)
+- Source is `Table_BOBL`, an Excel table populated from a pasted/embedded PowerBI
+  "Consolidated Backlog by PG" export — not a SAP flat-file extract. Column names
+  retain the original bracketed DAX-style names (e.g.
+  `PowerBI Consolidated Backlog by PG Last N Weeks[Plant]`).
+- `plant_material_key` is built from `Trim()` only — **it is not upper-cased**,
+  unlike every other group's key (PRDPL3, MB5T, DOH, REC all upper-case). This is
+  an inconsistency that could cause missed joins if source casing varies; flag
+  for reconciliation.
+- Enrichment groups by `plant_material_key`, summing `SumBackorder_Actual/Quantity`
+  and `SumBacklog_Quantity/Actual` (handles duplicate key rows via aggregation,
+  using a `try Number.From(...) otherwise 0` safe-conversion helper), then renames
+  to `Backorder Actual`, `Backorder Qnty`, `Backlog Actual`, `Backlog Qnty`.
+- `stg_bobl_clean.pq` contains a large commented-out block implementing an older
+  duplicate-detection approach (`key_row_count` / `duplicate_key_flag`) that was
+  superseded by the group-by aggregation now in `stg_bobl_enriched.pq`. Safe to
+  omit from the Python port; kept here only as historical context.
+
+**Reference/tag tables** (`docs/powerquery_m/tags/`)
+- `tbl_tag_region`: `Plant -> Region` (Excel table).
+- `tbl_tag_top60`: `plant_material_key -> top_60_flag` (Excel table).
+- `tbl_tag_sourceplant`: `source_key (Spec Proc) -> source_plant` (Excel table).
+- `stg_sap_t460a`: raw import of SAP table T460A (special procurement
+  configuration: SOBSL key / BESKZ procurement type) from a network file share
+  CSV. Not observed to be joined into any of the flows above in the current
+  `.pq` files — appears to be a documentation/lookup reference only. Confirm
+  actual usage with SME (it may feed `tbl_tag_sourceplant` manually rather than
+  via a live PQ join).
+
+**build overview (final assembly)** (`docs/powerquery_m/build overview/`)
+- `build_overview_p1_clean` anchors the grain on `out_prdpl3_review` (one row per
+  `plant_material_key`, already filtered to the active plant and product
+  hierarchy `00020*`).
+- `build_overview_p1_enriched` derives `"Major PG"` = characters 3-4 of
+  `Product hierarchy` (`Text.Middle(_, 3, 2)`), renames `source_plant` ->
+  `"Source Plant"`, and narrows to a curated ~33-column subset (drops many
+  PRDPL3 planning-only fields).
+- `build_overview_p2_clean` continues from `build_overview_p1_review`'s output
+  (exposed under the name `out_overview_p1_review`).
+- `build_overview_p2_enriched` is the core join query:
+  1. Drops deleted materials (`DelFlag = ""`).
+  2. Left-joins DOH pivot output, expands `WB, PP, U2, VC, VJ, VG, U1`, and
+     converts each to a null-safe absolute number.
+  3. Left-joins MB5T, expands `"Quantity in Transit"`.
+  4. `Available Stock = max(0, Tot Valuated Stk - (VJ + VC + VG + U1))`.
+     Note that `WB`, `PP`, `U2`, and in-transit quantity are **not** subtracted —
+     only `VJ/VC/VG/U1` reduce available stock.
+  5. Renames `Tot Valuated Stk -> "Total Stock Quantity"`,
+     `Total Value -> "Total Value Stock on Hand"`.
+  6. `Stocked Status = "Yes"` if `Total Stock Quantity > 0` else `"No"`.
+  7. `Average Monthly Forecast Demand = (VJ + PP + U1) / 3`.
+  8. `DOH = 0` if forecast `= 0`, else `(Available Stock / Average Monthly Forecast Demand) * 30`.
+  9. Left-joins BOBL, expands `Backorder Actual`, `Backorder Qnty`,
+     `Backlog Actual`, `Backlog Qnty`.
+  10. Final column reorder into the presentation shape.
+- `build_overview_p2_review` is a pass-through and is the table currently handed
+  to the Excel workbook.
+
+---
+
 ## 8. Configuration Strategy
 
 Technical configuration should not be embedded throughout Python code.
@@ -695,84 +854,126 @@ The exact field list and order should be derived from the current final Power Qu
 
 ## 14. Core Business Calculations
 
-The current business calculations must be extracted from Power Query and Excel and written as formal definitions.
+These calculations are now **confirmed** against the current Power Query
+implementation in `docs/powerquery_m/` (see section 7.6 for the full traced
+flow). Source query names are cited so the Python port can be checked line
+for line.
 
 ### 14.1 Plant-Material Key
 
-Provisional definition:
+Confirmed definition (used in PRDPL3, MB5T, DOH, REC):
 
 ```text
-plant_material_key = Plant + " - " + Material
+plant_material_key = Upper(Trim(Plant)) & "-" & Upper(Trim(Material with leading zeros stripped))
 ```
 
-Material and plant must first be converted to trimmed text.
+**Exception:** `stg_bobl_enriched.pq` builds its `plant_material_key` from
+`Trim()` only, without `Text.Upper`. This is an inconsistency versus every
+other group and should be reconciled (either fix the source query or normalize
+casing on the BOBL side of the Python join) rather than silently ported as-is.
 
 ### 14.2 Signed Requirement Quantity
 
-The requirement-type mapping determines whether the quantity is positive or negative.
+Confirmed source: `stg_mm_mrp_elements_rec_enriched.pq`.
 
-Provisional logic:
+Logic as implemented:
 
 ```text
-signed_quantity = raw_quantity * requirement_type_sign
+Is Negative Req Type = lookup(rec_req_type, Requirements Type).negative  (default false)
+Adj Req Qty = -Abs(Req. Qty.) if Is Negative Req Type else Abs(Req. Qty.)
 ```
 
-The mapping table must define the sign and the final requirement category.
+**However**, the final step of that same query (`AbsAdjReqQty`) re-applies
+`Number.Abs()` to `Adj Req Qty`, discarding the sign that was just computed.
+The exposed `out_mm_mrp_elements_rec_review` output is therefore always
+non-negative in the current production query, regardless of the
+`rec_req_type` sign lookup. **This must be confirmed with the SME** before the
+Python port decides whether to reproduce the bug (always positive) or the
+apparent intent (signed). Also note: `out_mm_mrp_elements_rec_review` is not
+currently joined into the final base table at all (section 7.6.1), so this
+logic may not need to be ported for Phase 1 unless the weekly REC output is
+brought into scope.
+
+The DOH group uses a different, unsigned rule instead
+(`stg_mm_mrp_elements_doh_clean.pq`):
+
+```text
+Adj Req Qty = Req. Qty. / 2   if Requirements Type = "BB"
+Adj Req Qty = Req. Qty.       otherwise
+```
 
 ### 14.3 Available Stock
 
-The current definition must be confirmed.
-
-Possible structure:
+Confirmed source: `build_overview_p2_enriched.pq` (`AddAvailableStock` step).
 
 ```text
-available_stock =
-    total_stock
-    + applicable_receipts
-    - applicable_requirements
+Available Stock = max(0, Total Stock Quantity - (VJ + VC + VG + U1))
 ```
 
-The exact included requirement and receipt types must be documented.
+Where `Total Stock Quantity` is PRDPL3's `Tot Valuated Stk` and `VJ/VC/VG/U1`
+are pivoted DOH requirement-type columns (already converted to absolute
+values). `WB`, `PP`, `U2`, and MB5T in-transit quantity are **not** subtracted.
+Safety stock is not deducted. Negative results are floored at 0, so
+`Available Stock` itself can never be negative (this in turn guarantees `DOH`
+cannot be negative — see 14.5).
 
 ### 14.4 Average Monthly Forecast
 
-A known provisional formula is:
+Confirmed source: `build_overview_p2_enriched.pq` (`AddAverageForecastDemand` step).
 
 ```text
-average_monthly_forecast = (VJ + PP + U1) / 3
+Average Monthly Forecast Demand = (VJ + PP + U1) / 3
 ```
 
-This must be reconciled against the production Power Query logic.
+Forecast is based exclusively on the **DOH** pivot columns (`VJ, PP, U1`), not
+on REC. REC's weekly output is not part of this calculation in the current
+production query.
 
 ### 14.5 Days on Hand
 
-A known provisional formula is:
+Confirmed source: `build_overview_p2_enriched.pq` (`AddDOH` step).
 
 ```text
 DOH =
-    0                                      when average_monthly_forecast = 0
-    (available_stock / average_monthly_forecast) * 30 otherwise
+    0                                                  when Average Monthly Forecast Demand = 0
+    (Available Stock / Average Monthly Forecast Demand) * 30   otherwise
 ```
 
-The following must be confirmed:
+Confirmed details:
 
-- Whether negative available stock is allowed.
-- Whether DOH may be negative.
-- Whether the result is rounded.
-- Whether forecast is based on REC, DOH, or both.
-- Whether stock in transit is included.
-- Whether safety stock is deducted.
-- Whether the calculation is calendar-day or fixed 30-day logic.
+- `Available Stock` is floored at 0, so `DOH` cannot be negative.
+- The result is **not rounded** in Power Query (any rounding for display is
+  applied later in the Excel workbook, outside this pipeline).
+- Forecast is DOH-sourced only (`VJ, PP, U1`); REC is not used.
+- Stock in transit (MB5T) is **not** included in the `Available Stock` used
+  here.
+- Safety stock is **not** deducted.
+- The 30-day multiplier is a fixed constant, not calendar-day-aware.
 
 ### 14.6 In-Transit Quantity
 
-Provisional definition:
+Confirmed source: `stg_mb5t_enriched.pq` / `out_mb5t_review.pq`.
 
 ```text
-in_transit = sum(MB5T quantity)
+in_transit = sum(MB5T Quantity) grouped by plant_material_key
 ```
 
-The aggregation grain and receiving-plant logic must be confirmed.
+Nulls are replaced with 0 before summing. The result is renamed
+`"Quantity in Transit"` in the review query and is exposed in the final base
+table, but (per 14.3) it is **not** currently subtracted from
+`Available Stock` or used in the `DOH` calculation — it is presentation-only
+in the current production flow. Confirm with SME whether this is intended.
+
+### 14.7 Deleted-Material Filter
+
+Confirmed source: `build_overview_p2_enriched.pq` (`removeDeletedMaterials` step).
+
+```text
+keep row where PRDPL3.DelFlag = ""
+```
+
+Applied before any of the joins/enrichments above — rows flagged for deletion
+in SAP never reach the DOH/MB5T/BOBL joins or the DOH/forecast calculations.
 
 ---
 
