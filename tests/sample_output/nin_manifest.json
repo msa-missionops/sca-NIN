@@ -1,0 +1,21 @@
+{
+  "run_id": "20260201_000000",
+  "started_at": "2026-08-05T19:04:49.355758+00:00",
+  "status": "completed",
+  "as_of_date": null,
+  "sources": {
+    "prdpl3": "/tmp/tmprdug5urg/prdpl3/PRDPL3_export.txt",
+    "mrp_rec": "/tmp/tmprdug5urg/mrp_rec/20260201_run/MM_MRP_ELEMENTS_REC_20260201_US01_x.txt",
+    "mrp_doh": "/tmp/tmprdug5urg/mrp_doh/20260201_run/MM_MRP_ELEMENTS_DOH_20260201_US01_x.txt",
+    "mb5t": "/tmp/tmprdug5urg/mb5t/MB5T_export.txt"
+  },
+  "row_counts": {
+    "prdpl3_raw": 1,
+    "mrp_rec_raw": 2,
+    "mrp_doh_raw": 1,
+    "mb5t_raw": 1,
+    "nin_base_table": 1
+  },
+  "validation_status": "not_run",
+  "output_file": "/tmp/tmprdug5urg/output/nin_base_table"
+}
