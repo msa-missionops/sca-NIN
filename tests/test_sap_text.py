@@ -72,6 +72,19 @@ def test_to_number_strips_thousands_separator():
     assert pd.isna(result.iloc[3])
 
 
+def test_to_number_handles_sap_trailing_minus_sign():
+    """SAP exports negative quantities/amounts with a trailing (not
+    leading) minus sign, e.g. reversal/return transactions in MB5T
+    (`"17-"` meaning `-17`). Confirmed against a real MB5T export where
+    naive `pd.to_numeric` silently dropped these to NaN, understating
+    `Quantity in Transit` sums (real production output showed negative
+    values that our unfixed port rendered as 0)."""
+    series = pd.Series(["17-", "1.37-", "1,866.49-", "100", "-5", None])
+    result = to_number(series)
+    assert result.tolist()[:5] == [-17.0, -1.37, -1866.49, 100.0, -5.0]
+    assert pd.isna(result.iloc[5])
+
+
 def test_normalize_plant_trims_and_uppercases():
     series = pd.Series([" us01 ", "US02"])
     assert normalize_plant(series).tolist() == ["US01", "US02"]

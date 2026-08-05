@@ -162,9 +162,13 @@ def parse_dynamic_header_sap_export(
 
 def to_number(series: pd.Series) -> pd.Series:
     """Convert a text column to a numeric column, tolerating thousands
-    separators and blanks, matching `Table.TransformColumnTypes(..., type
-    number)` with a `Text.Replace(_, ",", "")`-style cleanup."""
-    cleaned = series.astype("string").str.replace(",", "", regex=False)
+    separators, blanks, and SAP's trailing-minus-sign convention (e.g.
+    `"17-"` meaning `-17`, commonly seen on reversal/return transactions),
+    matching `Table.TransformColumnTypes(..., type number)`'s locale-aware
+    number parsing on real SAP exports."""
+    cleaned = series.astype("string").str.strip().str.replace(",", "", regex=False)
+    is_trailing_negative = cleaned.str.endswith("-", na=False)
+    cleaned = cleaned.where(~is_trailing_negative, "-" + cleaned.str.removesuffix("-"))
     return pd.to_numeric(cleaned, errors="coerce")
 
 
