@@ -22,7 +22,11 @@ from nin_pipeline.business.build_overview import (
 )
 from nin_pipeline.config import PipelineConfig
 from nin_pipeline.ingestion import find_latest_file
-from nin_pipeline.reference_data import active_plant, load_reference_data
+from nin_pipeline.reference_data import (
+    active_plant,
+    load_reference_data,
+    load_reference_data_from_workbook,
+)
 from nin_pipeline.sources.bobl import clean_bobl, enrich_bobl
 from nin_pipeline.sources.mb5t import clean_mb5t, enrich_mb5t
 from nin_pipeline.sources.mrp_elements_doh import (
@@ -37,12 +41,6 @@ from nin_pipeline.sources.mrp_elements_rec import (
     pivot_mrp_elements_rec_weekly,
 )
 from nin_pipeline.sources.prdpl3 import clean_prdpl3, enrich_prdpl3
-
-# Convention for this Python port: BOBL's PowerBI matrix export is saved as
-# a CSV under `reference_data_folder`, since (unlike the other sources) it
-# is not a folder of dated SAP extracts to discover. See
-# `nin_pipeline.sources.bobl` and `docs/nin_data_contracts.md` section 5.
-BOBL_FILENAME = "bobl.csv"
 
 
 @dataclass
@@ -79,7 +77,11 @@ def run_pipeline(config: PipelineConfig, run_id: str | None = None) -> PipelineR
     run_id = run_id or _new_run_id()
     paths = config.paths
 
-    reference_data = load_reference_data(paths.reference_data_folder)
+    reference_data = (
+        load_reference_data_from_workbook(paths.reference_data_workbook)
+        if paths.reference_data_workbook is not None
+        else load_reference_data(paths.reference_data_folder)
+    )
     plant = active_plant(reference_data)
 
     prdpl3_file = find_latest_file(paths.prdpl3_folder)
@@ -108,8 +110,7 @@ def run_pipeline(config: PipelineConfig, run_id: str | None = None) -> PipelineR
     rec_enriched = enrich_mrp_elements_rec(rec_clean, reference_data.rec_req_type)
     rec_weekly = pivot_mrp_elements_rec_weekly(rec_enriched)
 
-    bobl_raw = pd.read_csv(paths.reference_data_folder / BOBL_FILENAME, dtype="string")
-    bobl_clean = clean_bobl(bobl_raw)
+    bobl_clean = clean_bobl(reference_data.bobl)
     bobl_enriched = enrich_bobl(bobl_clean)
 
     overview_p1 = assemble_overview_p1(prdpl3_enriched)

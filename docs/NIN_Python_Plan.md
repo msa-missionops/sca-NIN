@@ -612,6 +612,31 @@ Configuration should include only technical settings.
 
 Business-managed mappings should remain separate reference files.
 
+### 8.1 Reference/tag data: CSV folder or Excel workbook
+
+The six "tag" tables (`Region`, `Top60`, `Source Plant`, `rec_req_type`,
+`plant_evaluation`, `BOBL`) are business-user-maintained data, not
+engineering-owned config. In production these are genuine Excel `Table`
+(ListObject) objects the SME edits directly in a workbook (referenced via
+`Excel.CurrentWorkbook(){[Name="tbl_Tag_Region"]}` etc. in the `.pq` source),
+so the Python pipeline supports loading them either way — whichever fits the
+SME's actual workflow:
+
+```yaml
+paths:
+  reference_data_folder: ".\\reference_data"   # one CSV per table, OR:
+  reference_data_workbook: ".\\reference_data.xlsx"  # single workbook, named Tables
+```
+
+Exactly one of `reference_data_folder`/`reference_data_workbook` must be set;
+`load_config` raises if both or neither are present. When
+`reference_data_workbook` is set, `load_reference_data_from_workbook()`
+(`reference_data.py`) opens the file with `openpyxl` and reads each of the
+six named Excel Tables by name (case-insensitive, independent of worksheet)
+— `tbl_Tag_Region`, `tbl_Tag_Top60`, `tbl_tag_sourceplant`, `rec_req_type`,
+`plant_evaluation`, `Table_BOBL` — requiring zero export/copy-paste step from
+the SME. See `docs/nin_data_contracts.md` Open Decision #9.
+
 ---
 
 ## 9. File Discovery and Run Selection
