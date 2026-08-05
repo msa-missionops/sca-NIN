@@ -76,6 +76,15 @@ def to_number(series: pd.Series) -> pd.Series:
     return pd.to_numeric(cleaned, errors="coerce")
 
 
+def to_integer(series: pd.Series) -> pd.Series:
+    """Convert a text column to a nullable integer column, matching
+    `Table.TransformColumnTypes(..., Int64.Type)`. Values are rounded before
+    casting since real SAP quantity fields are expected to be whole numbers;
+    a fractional source value indicates a data-quality issue worth
+    surfacing during reconciliation rather than silently truncating."""
+    return to_number(series).round().astype("Int64")
+
+
 def normalize_plant(series: pd.Series) -> pd.Series:
     """`Text.Upper(Text.Trim(_))`, applied to a Plant column."""
     return series.astype("string").str.strip().str.upper()
