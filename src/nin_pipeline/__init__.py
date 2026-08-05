@@ -1,2 +1,3 @@
 """nin_pipeline package"""
+
 __version__ = "0.0.0"
