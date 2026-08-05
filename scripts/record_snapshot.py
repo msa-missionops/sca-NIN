@@ -22,7 +22,7 @@ def count_csv_rows(path: Path):
     try:
         with path.open('r', errors='ignore') as fh:
             return sum(1 for _ in fh)
-    except Exception:
+    except OSError:
         return None
 
 
@@ -88,7 +88,7 @@ def scan_run(run_id: str):
             mapped['mb5t'] = path
     # map powerquery if only one expected file exists
     if len(expected_files) == 1:
-        mapped['powerquery_output'] = list(expected_files.values())[0]
+        mapped['powerquery_output'] = next(iter(expected_files.values()))
     elif 'powerquery' in ' '.join(expected_files.keys()).lower():
         for k,v in expected_files.items():
             if 'powerquery' in k.lower():
@@ -99,7 +99,6 @@ def scan_run(run_id: str):
     grouped_counts = {}
     for fname, cnt in row_counts.items():
         # assign to matching group if possible
-        key = fname
         low = fname.lower()
         if 'prdpl3' in low:
             grouped_counts['prdpl3_raw'] = cnt
