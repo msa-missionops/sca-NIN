@@ -68,6 +68,44 @@ def parse_pipe_delimited_sap_export(
     return pd.DataFrame(data_rows, columns=header, dtype="string")
 
 
+def parse_dynamic_header_sap_export(
+    path: Path,
+    header_tokens: set[str],
+    delimiter: str = "#(tab)",
+    encoding: str = "cp1252",
+) -> pd.DataFrame:
+    """Parse a SAP export where the real header row's position is not fixed
+    (a variable number of banner/metadata rows precede it), matching
+    stg_mm_mrp_elements_rec_clean.pq / stg_mm_mrp_elements_doh_clean.pq's
+    `TransformSapFile` inner function.
+
+    Steps:
+
+    1. Read the file with the given delimiter (tab by default).
+    2. Drop fully-blank rows (every cell empty).
+    3. Locate the header row as the first row containing every value in
+       `header_tokens` (see `detect_sap_header_row`).
+    4. Promote that row to the column header, dropping any column whose
+       header name is blank.
+    """
+    from nin_pipeline.ingestion import detect_sap_header_row
+
+    rows = read_delimited_text(path, delimiter=delimiter, encoding=encoding)
+    non_blank = [row for row in rows if any(cell != "" for cell in row)]
+
+    header_index = detect_sap_header_row(non_blank, header_tokens)
+    header_row = non_blank[header_index]
+    data_rows = non_blank[header_index + 1 :]
+
+    keep_indices = [i for i, name in enumerate(header_row) if name.strip() != ""]
+    header = [header_row[i].strip() for i in keep_indices]
+    kept_rows = [
+        [row[i] if i < len(row) else "" for i in keep_indices] for row in data_rows
+    ]
+
+    return pd.DataFrame(kept_rows, columns=header, dtype="string")
+
+
 def to_number(series: pd.Series) -> pd.Series:
     """Convert a text column to a numeric column, tolerating thousands
     separators and blanks, matching `Table.TransformColumnTypes(..., type
@@ -95,3 +133,23 @@ def normalize_material(series: pd.Series) -> pd.Series:
     Material column: trims whitespace, upper-cases, then strips leading
     zeros."""
     return series.astype("string").str.strip().str.upper().str.lstrip("0")
+
+
+def week_ending_friday(dates: pd.Series) -> pd.Series:
+    """Compute `Week Ending` the same way as
+    stg_mm_mrp_elements_rec_clean.pq / stg_mm_mrp_elements_doh_clean.pq:
+
+    ```text
+    Date.AddDays(d, 7 - Date.DayOfWeek(d, Day.Friday))
+    ```
+
+    `Date.DayOfWeek(d, Day.Friday)` returns 0 for Friday, 1 for Saturday, ...,
+    6 for Thursday. **Note the confirmed quirk**: for a date that already
+    falls on a Friday, this formula adds a full 7 days (result = the
+    *following* Friday), not 0 days. This is reproduced exactly here since
+    it is the behavior confirmed in the current production query; flag with
+    the SME if same-day Friday dates were intended to map to themselves.
+    """
+    dates = pd.to_datetime(dates, errors="coerce")
+    day_of_week_from_friday = (dates.dt.dayofweek - 4) % 7
+    return dates + pd.to_timedelta(7 - day_of_week_from_friday, unit="D")
