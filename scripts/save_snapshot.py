@@ -12,7 +12,7 @@ import json
 import os
 import shutil
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEST_RAW = os.path.join(ROOT, 'test_data', 'raw')
@@ -42,7 +42,7 @@ def create_manifest(run_id, entries, as_of_date=None):
     manifest_path = os.path.join(run_dir, 'manifest.json')
     manifest = {
         'run_id': run_id,
-        'started_at': datetime.now().isoformat(),
+        'started_at': datetime.now(timezone.utc).isoformat(),
         'created_by': os.getenv('USER') or os.getenv('USERNAME') or 'unknown',
         'status': 'completed',
         'as_of_date': as_of_date,
@@ -69,7 +69,7 @@ def main():
     args = parser.parse_args()
 
     ensure_dirs()
-    run_id = args.run_id or datetime.now().strftime('%Y%m%d_%H%M%S')
+    run_id = args.run_id or datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
 
     copied = {}
     if args.copy_all_dir:
