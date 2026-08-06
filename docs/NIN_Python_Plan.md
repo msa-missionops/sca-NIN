@@ -35,7 +35,37 @@ The Python application will read the raw SAP exports, perform all required clean
 
 ---
 
-## 2. Current Project Boundary
+## 1.1 Current Status (updated 2026-08-06)
+
+**Phases 1A-1F are implemented and tested; Phase 1G (reconciliation) has real-data validation passing.** 70 automated tests pass, `ruff`/`black` clean, CI green on every push (`.github/workflows/ci.yml`, Python 3.10/3.11).
+
+What's working end-to-end today (`nin_pipeline.pipeline.run_pipeline`):
+
+- All four sources implemented and unit-tested: `prdpl3`, `mb5t`, `mrp_elements_doh`, `mrp_elements_rec` (including the REC weekly `Total Forecast (Qty)`/`week 1..27` transpose, Open Decision #1/#7).
+- Business assembly (`build_overview.py`) reproduces `build_overview_p1`/`build_overview_p2` (`nin_base_table`), including `Available Stock`, `Average Monthly Forecast Demand`, `DOH` (see §14 and Open Decisions #2/#3).
+- Reference/tag data (`Region`, `Top60`, `Source Plant`, `rec_req_type`, `plant_evaluation`) loads from either a `reference_data/` CSV folder (current default, real data seeded for `region`/`sourceplant`/`rec_req_type`; `top60`/`plant_evaluation` still only partially/sample-filled) or a single Excel workbook (Open Decision #9) — either path is fully interchangeable via config.
+- Multi-plant support: `paths.active_plants_folder` runs the full pipeline once per plant listed in a headerless single-column CSV and concatenates into one combined `nin_base_table` (Open Decision #11).
+- Configurable file-selection: `file_selection.mrp_doh_file_extension`/`mrp_rec_file_extension` (default `txt`) let the DOH/REC file-discovery step match whichever extension the live SAP export actually uses (Open Decision #12) — confirmed the real live exports as of Aug 2026 are `.csv`.
+- A real end-to-end test run against fresh live SAP extracts (Aug 6 2026, sourced from `\\filer3\power_bi$\GSP\Stockout_Excel\Output`, copied locally into gitignored `tests/live_input_v2/`) completed successfully for all 3 currently-active plants (DED2/MXD1/USD1) — 13,754 combined `nin_base_table` rows, correct latest-file selection confirmed via the run manifest.
+
+**Deferred / open:**
+
+- **BOBL is fully removed from the pipeline for now** (Open Decision #10) — its 4 output columns are always null placeholders. The source module (`nin_pipeline.sources.bobl`) is implemented/tested but unused; re-wire once BOBL's real input/refresh mechanism is decided.
+- `reference_data/top60.csv` and `plant_evaluation.csv` still only have sample/partial data, not the full real business tables — needs filling in before this is fully production-ready.
+- Negative-flag sign logic (Open Decision #2) is implemented and confirmed working (`Signed Adj Req Qty` correctly reflects `rec_req_type`'s `negative` column), but `Adj Req Qty`/the weekly forecast columns are always absolute by design, matching confirmed real production output — flagged to the user as worth revisiting if expectations differ now that real sign data is in place.
+- No automated reconciliation-diff tooling has been run against a *full* real production output yet for all plants/columns simultaneously (prior reconciliation checks in Open Decision #8 covered DED2 only, pre-multi-plant).
+
+See the Open Decisions table in `docs/nin_data_contracts.md` for the full rationale/history behind every non-obvious behavior above.
+
+---
+
+## 1.2 Session Artifacts (not committed)
+
+- `tests/live_input_v2/` (gitignored) — local scratch copy of live SAP extract folders used for ad hoc full-pipeline test runs; safe to delete/refresh at any time, never pushed to GitHub.
+
+---
+
+
 
 ### 2.1 Retained for the Initial Phase
 
