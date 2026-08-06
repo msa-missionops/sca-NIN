@@ -24,14 +24,6 @@ def write_reference_data(folder):
         "type,negative\nVJ,true\nPP,false\nU1,1\nWB,0\nVC,yes\nVG,no\n"
     )
     (folder / "plant_evaluation.csv").write_text("Plant\n us01 \n")
-    (folder / "bobl.csv").write_text(
-        "PowerBI Consolidated Backlog by PG Last N Weeks[Plant],"
-        "PowerBI Consolidated Backlog by PG Last N Weeks"
-        "[Material.Material Level 01.Key],"
-        "[SumBackorder_Actual],[SumBackorder_Quantity],"
-        "[SumBacklog_Quantity],[SumBacklog_Actual]\n"
-        "US01,123,1,2,3,4\n"
-    )
 
 
 def _add_table(ws, display_name, rows, start_row=1):
@@ -52,7 +44,7 @@ def _add_table(ws, display_name, rows, start_row=1):
 
 
 def write_reference_workbook(path):
-    """Build a workbook with the same 6 named Excel Tables (across multiple
+    """Build a workbook with the same 5 named Excel Tables (across multiple
     worksheets, out of order, mixed case) that production's tables use, to
     confirm lookup is by table name (not sheet name/position)."""
     wb = openpyxl.Workbook()
@@ -85,25 +77,6 @@ def write_reference_workbook(path):
         start_row=1,
     )
     _add_table(ws3, "plant_evaluation", [["Plant"], [" us01 "]], start_row=6)
-    _add_table(
-        ws3,
-        "Table_BOBL",
-        [
-            [
-                "PowerBI Consolidated Backlog by PG Last N Weeks[Plant]",
-                (
-                    "PowerBI Consolidated Backlog by PG Last N Weeks"
-                    "[Material.Material Level 01.Key]"
-                ),
-                "[SumBackorder_Actual]",
-                "[SumBackorder_Quantity]",
-                "[SumBacklog_Quantity]",
-                "[SumBacklog_Actual]",
-            ],
-            ["US01", "123", "1", "2", "3", "4"],
-        ],
-        start_row=9,
-    )
     wb.save(path)
 
 
@@ -147,7 +120,6 @@ def test_load_reference_data_from_workbook_reads_named_tables_across_sheets(tmp_
     assert ref.region.iloc[0]["Region"] == "Northeast"
     assert ref.top60.iloc[0]["top_60_flag"] == "top 60"
     assert ref.sourceplant.iloc[0]["source_plant"] == "US02"
-    assert ref.bobl.iloc[0]["[SumBackorder_Actual]"] == "1"
     assert active_plant(ref) == "US01"
 
     rec = ref.rec_req_type.set_index("type")["negative"]

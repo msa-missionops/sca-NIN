@@ -8,8 +8,16 @@ graph in ``docs/NIN_Python_Plan.md`` section 7.6 and the final schema in
 
 PRDPL3 (already shaped by ``nin_pipeline.sources.prdpl3.enrich_prdpl3``) is
 the anchor grain, one row per ``plant_material_key``. MRP_ELEMENTS_DOH's
-pivoted output, MB5T's aggregated in-transit quantity, and BOBL's
-aggregated backorder/backlog measures are then left-joined onto it.
+pivoted output and MB5T's aggregated in-transit quantity are then
+left-joined onto it.
+
+BOBL support (backorder/backlog measures) is deferred for now -- see
+``docs/nin_data_contracts.md`` Open Decision #10. The four BOBL output
+columns (``Backorder Actual``, ``Backorder Qnty``, ``Backlog Actual``,
+``Backlog Qnty``) are still emitted, always null, to keep the base table
+schema reconciliation-compatible; ``nin_pipeline.sources.bobl`` still has
+the transformation logic ready to be re-wired in once BOBL's real input
+source is decided.
 
 MRP_ELEMENTS_REC's weekly forecast (``Total Forecast (Qty)``/``week 1``..
 ``week 27``, from
@@ -143,7 +151,6 @@ def assemble_nin_base_table(
     overview_p1: pd.DataFrame,
     doh_pivot: pd.DataFrame,
     mb5t_enriched: pd.DataFrame,
-    bobl_enriched: pd.DataFrame,
     rec_weekly: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Assemble `nin_base_table` (`build_overview_p2_review`).
@@ -163,8 +170,11 @@ def assemble_nin_base_table(
     6. `Average Monthly Forecast Demand = (VJ + PP + U1) / 3`.
     7. `DOH = 0 if forecast == 0 else (Available Stock / forecast) * 30`
        (not rounded).
-    8. Left-join BOBL's backorder/backlog measures (stay null if
-       unmatched -- no default-to-zero in the source for these columns).
+    8. BOBL processing is deferred for now (see
+       `docs/nin_data_contracts.md` Open Decision #10) -- the four
+       backorder/backlog columns are emitted as null placeholders so the
+       output schema stays reconciliation-compatible, rather than joined
+       from real BOBL data.
     9. If `rec_weekly` is given (see
        `nin_pipeline.sources.mrp_elements_rec.pivot_mrp_elements_rec_weekly`),
        left-join `Total Forecast (Qty)`/`week 1`..`week 27` on
@@ -216,11 +226,10 @@ def assemble_nin_base_table(
     safe_forecast = forecast_demand.replace(0, np.nan)
     df["DOH"] = ((df["Available Stock"] / safe_forecast) * 30).fillna(0)
 
-    df = df.merge(
-        bobl_enriched,
-        on="plant_material_key",
-        how="left",
-    )
+    # BOBL is deferred for now (Open Decision #10) -- emit null placeholders
+    # so the schema stays reconciliation-compatible.
+    for col in ("Backorder Actual", "Backorder Qnty", "Backlog Actual", "Backlog Qnty"):
+        df[col] = np.nan
 
     if rec_weekly is not None:
         df = df.merge(rec_weekly, on="plant_material_key", how="left")

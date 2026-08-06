@@ -1,7 +1,7 @@
 # Reference / Tag Data
 
 This folder is the **central, version-controlled source of truth** for the
-six small business-maintained lookup ("tag") tables the pipeline joins
+five small business-maintained lookup ("tag") tables the pipeline joins
 against. It is loaded via `paths.reference_data_folder` in
 `config/settings.example.yaml` (see `docs/NIN_Python_Plan.md` section 8.1
 and `docs/nin_data_contracts.md` Open Decision #9 for the full design
@@ -14,7 +14,7 @@ the change, and re-run the pipeline.
 
 If you ever *do* need live-editing-in-Excel instead, the pipeline also
 supports pointing `paths.reference_data_workbook` at a single `.xlsx` file
-containing the same six tables as named Excel Tables — see
+containing the same five tables as named Excel Tables — see
 `nin_pipeline.reference_data.load_reference_data_from_workbook`. Use
 exactly one of the two options, not both.
 
@@ -27,7 +27,6 @@ exactly one of the two options, not both.
 | `sourceplant.csv` | `source_key, desc, source_plant` | Decodes MRP "source" codes (e.g. `EB` = "Costing - from DED2") to a plant. Full list copied from `docs/design_reference/tbl_tag_sourceplant.csv`. |
 | `rec_req_type.csv` | `type, negative` | Marks which REC "Requirements Type" codes represent negative (supply-reducing) quantities. `negative` accepts `true`/`false`, `1`/`0`, or `yes`/`no` (case-insensitive); blank/unknown types default to not-negative. **Empty template** — populate from the master workbook. |
 | `plant_evaluation.csv` | `Plant` | The single active evaluation plant for a given pipeline run. **Empty template** — add exactly one row before running. |
-| `bobl.csv` | Raw PowerBI matrix export column names (see `nin_pipeline.sources.bobl`) | Backlog/backorder totals pasted from the PowerBI matrix. **Header-only template** — paste rows from the PowerBI export. |
 
 ## Updating a value
 

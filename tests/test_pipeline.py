@@ -145,14 +145,6 @@ def write_reference_data(folder):
     (folder / "sourceplant.csv").write_text("source_key,desc,source_plant\n")
     (folder / "rec_req_type.csv").write_text("type,negative\n")
     (folder / "plant_evaluation.csv").write_text("Plant\nUS01\n")
-    (folder / "bobl.csv").write_text(
-        "PowerBI Consolidated Backlog by PG Last N Weeks[Plant],"
-        "PowerBI Consolidated Backlog by PG Last N Weeks"
-        "[Material.Material Level 01.Key],"
-        "[SumBackorder_Actual],[SumBackorder_Quantity],"
-        "[SumBacklog_Quantity],[SumBacklog_Actual]\n"
-        "US01,123,1,2,3,4\n"
-    )
 
 
 def write_reference_workbook(path):
@@ -181,24 +173,6 @@ def write_reference_workbook(path):
     add_table("tbl_tag_sourceplant", [["source_key", "desc", "source_plant"]], 7)
     add_table("rec_req_type", [["type", "negative"]], 10)
     add_table("plant_evaluation", [["Plant"], ["US01"]], 13)
-    add_table(
-        "Table_BOBL",
-        [
-            [
-                "PowerBI Consolidated Backlog by PG Last N Weeks[Plant]",
-                (
-                    "PowerBI Consolidated Backlog by PG Last N Weeks"
-                    "[Material.Material Level 01.Key]"
-                ),
-                "[SumBackorder_Actual]",
-                "[SumBackorder_Quantity]",
-                "[SumBacklog_Quantity]",
-                "[SumBacklog_Actual]",
-            ],
-            ["US01", "123", "1", "2", "3", "4"],
-        ],
-        16,
-    )
     wb.save(path)
 
 
@@ -317,8 +291,10 @@ def test_run_pipeline_assembles_base_table_end_to_end(tmp_path):
     assert row["VJ"] == 30
     # Available Stock = max(0, 200 - (30+0+0+0)) = 170
     assert row["Available Stock"] == 170
-    assert row["Backorder Actual"] == 1
-    assert row["Backlog Qnty"] == 3
+    # BOBL processing is deferred for now (Open Decision #10) -- placeholders
+    # are always null.
+    assert pd.isna(row["Backorder Actual"])
+    assert pd.isna(row["Backlog Qnty"])
 
     # Weekly REC forecast transpose: week 1 = earliest Week Ending (10),
     # week 2 = next (5), remaining weeks default to 0, Total Forecast (Qty)

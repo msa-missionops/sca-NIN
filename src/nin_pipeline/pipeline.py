@@ -27,7 +27,6 @@ from nin_pipeline.reference_data import (
     load_reference_data,
     load_reference_data_from_workbook,
 )
-from nin_pipeline.sources.bobl import clean_bobl, enrich_bobl
 from nin_pipeline.sources.mb5t import clean_mb5t, enrich_mb5t
 from nin_pipeline.sources.mrp_elements_doh import (
     clean_mrp_elements_doh,
@@ -68,10 +67,11 @@ def run_pipeline(config: PipelineConfig, run_id: str | None = None) -> PipelineR
        -- per docs/nin_data_contracts.md Open Decision #1 (updated), this
        join has no `.pq` equivalent; the real final Excel workbook builds
        it with a native SUMIFS formula matrix, confirmed by SME.
-    3. Load and shape the BOBL export.
-    4. Assemble `build_overview_p1` from enriched PRDPL3, then the final
-       `nin_base_table` by joining DOH/MB5T/BOBL/REC-weekly.
-    5. Write a run manifest recording the selected source files and row
+    3. Assemble `build_overview_p1` from enriched PRDPL3, then the final
+       `nin_base_table` by joining DOH/MB5T/REC-weekly. BOBL processing is
+       deferred for now (see docs/nin_data_contracts.md Open Decision #10)
+       -- its four output columns are emitted as null placeholders.
+    4. Write a run manifest recording the selected source files and row
        counts, per docs/NIN_Python_Plan.md section 10.
     """
     run_id = run_id or _new_run_id()
@@ -110,15 +110,11 @@ def run_pipeline(config: PipelineConfig, run_id: str | None = None) -> PipelineR
     rec_enriched = enrich_mrp_elements_rec(rec_clean, reference_data.rec_req_type)
     rec_weekly = pivot_mrp_elements_rec_weekly(rec_enriched)
 
-    bobl_clean = clean_bobl(reference_data.bobl)
-    bobl_enriched = enrich_bobl(bobl_clean)
-
     overview_p1 = assemble_overview_p1(prdpl3_enriched)
     base_table = assemble_nin_base_table(
         overview_p1,
         doh_pivot,
         mb5t_enriched,
-        bobl_enriched,
         rec_weekly=rec_weekly,
     )
 

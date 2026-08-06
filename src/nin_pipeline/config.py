@@ -3,7 +3,7 @@
 Loads the technical settings described in docs/NIN_Python_Plan.md section 8
 from a YAML file: source folders, file-selection strategy, and output
 options. Business-managed mappings (region/top60/sourceplant/rec_req_type/
-plant_evaluation/bobl) are *not* part of this config -- they are loaded by
+plant_evaluation) are *not* part of this config -- they are loaded by
 `nin_pipeline.reference_data` from either a single Excel workbook
 (`paths.reference_data_workbook`, recommended -- lets business users keep
 editing the same named Excel Tables they already maintain, no export step)

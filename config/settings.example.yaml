@@ -9,7 +9,7 @@
 # strategy, and docs/nin_data_contracts.md for the reference-data file
 # formats expected under `paths.reference_data_folder`
 # (region.csv, top60.csv, sourceplant.csv, rec_req_type.csv,
-# plant_evaluation.csv, bobl.csv).
+# plant_evaluation.csv).
 
 paths:
   prdpl3_folder: "\\\\filer3\\power_bi$\\GSP\\NIN\\output\\PRDPL3"

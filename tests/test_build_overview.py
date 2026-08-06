@@ -116,21 +116,8 @@ def test_assemble_nin_base_table_drops_deleted_materials_and_computes_calcs():
     mb5t_enriched = pd.DataFrame(
         [{"plant_material_key": "US01-123", "Quantity in Transit": 7}]
     )
-    bobl_enriched = pd.DataFrame(
-        [
-            {
-                "plant_material_key": "US01-123",
-                "Backorder Actual": 1,
-                "Backorder Qnty": 2,
-                "Backlog Actual": 3,
-                "Backlog Qnty": 4,
-            }
-        ]
-    )
 
-    result = assemble_nin_base_table(
-        overview_p1, doh_pivot, mb5t_enriched, bobl_enriched
-    )
+    result = assemble_nin_base_table(overview_p1, doh_pivot, mb5t_enriched)
 
     # Deleted material dropped.
     assert len(result) == 1
@@ -150,8 +137,10 @@ def test_assemble_nin_base_table_drops_deleted_materials_and_computes_calcs():
     expected_doh = (155 / ((30 + 15 + 5) / 3)) * 30
     assert abs(row["DOH"] - expected_doh) < 1e-9
 
-    assert row["Backorder Actual"] == 1
-    assert row["Backlog Qnty"] == 4
+    # BOBL processing is deferred for now (Open Decision #10) -- placeholders
+    # are always null.
+    assert pd.isna(row["Backorder Actual"])
+    assert pd.isna(row["Backlog Qnty"])
     assert row["Total Stock Quantity"] == 200
     assert row["Total Value Stock on Hand"] == 5000
 
@@ -177,19 +166,8 @@ def test_assemble_nin_base_table_zero_forecast_demand_gives_zero_doh():
     mb5t_enriched = pd.DataFrame(
         [{"plant_material_key": "US01-123", "Quantity in Transit": 0}]
     )
-    bobl_enriched = pd.DataFrame(
-        columns=[
-            "plant_material_key",
-            "Backorder Actual",
-            "Backorder Qnty",
-            "Backlog Actual",
-            "Backlog Qnty",
-        ]
-    )
 
-    result = assemble_nin_base_table(
-        overview_p1, doh_pivot, mb5t_enriched, bobl_enriched
-    )
+    result = assemble_nin_base_table(overview_p1, doh_pivot, mb5t_enriched)
     row = result.iloc[0]
     assert row["Average Monthly Forecast Demand"] == 0
     assert row["DOH"] == 0
@@ -213,19 +191,8 @@ def test_assemble_nin_base_table_missing_doh_row_defaults_demand_to_zero():
         ]
     )
     mb5t_enriched = pd.DataFrame(columns=["plant_material_key", "Quantity in Transit"])
-    bobl_enriched = pd.DataFrame(
-        columns=[
-            "plant_material_key",
-            "Backorder Actual",
-            "Backorder Qnty",
-            "Backlog Actual",
-            "Backlog Qnty",
-        ]
-    )
 
-    result = assemble_nin_base_table(
-        overview_p1, doh_pivot, mb5t_enriched, bobl_enriched
-    )
+    result = assemble_nin_base_table(overview_p1, doh_pivot, mb5t_enriched)
     row = result.iloc[0]
     for col in ("WB", "VJ", "VC", "VG", "PP", "U1", "U2"):
         assert row[col] == 0
@@ -255,15 +222,6 @@ def test_assemble_nin_base_table_joins_rec_weekly_forecast_and_defaults_missing_
         ]
     )
     mb5t_enriched = pd.DataFrame(columns=["plant_material_key", "Quantity in Transit"])
-    bobl_enriched = pd.DataFrame(
-        columns=[
-            "plant_material_key",
-            "Backorder Actual",
-            "Backorder Qnty",
-            "Backlog Actual",
-            "Backlog Qnty",
-        ]
-    )
     # Only "US01-123" (the surviving, non-deleted row) has REC forecast data.
     rec_weekly = pd.DataFrame(
         [
@@ -277,7 +235,7 @@ def test_assemble_nin_base_table_joins_rec_weekly_forecast_and_defaults_missing_
     )
 
     result = assemble_nin_base_table(
-        overview_p1, doh_pivot, mb5t_enriched, bobl_enriched, rec_weekly=rec_weekly
+        overview_p1, doh_pivot, mb5t_enriched, rec_weekly=rec_weekly
     )
     row = result.iloc[0]
     assert row["Total Forecast (Qty)"] == 15.0
@@ -304,18 +262,7 @@ def test_assemble_nin_base_table_without_rec_weekly_omits_weekly_columns():
         ]
     )
     mb5t_enriched = pd.DataFrame(columns=["plant_material_key", "Quantity in Transit"])
-    bobl_enriched = pd.DataFrame(
-        columns=[
-            "plant_material_key",
-            "Backorder Actual",
-            "Backorder Qnty",
-            "Backlog Actual",
-            "Backlog Qnty",
-        ]
-    )
 
-    result = assemble_nin_base_table(
-        overview_p1, doh_pivot, mb5t_enriched, bobl_enriched
-    )
+    result = assemble_nin_base_table(overview_p1, doh_pivot, mb5t_enriched)
     assert "Total Forecast (Qty)" not in result.columns
     assert "week 1" not in result.columns
