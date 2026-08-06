@@ -1,0 +1,67 @@
+source_key,desc,source_plant
+10,Consignment,ment
+30,Subcontracting,ting
+40,DO NOT USE, USE
+41,DO NOT USE, USE
+43,DO NOT USE, USE
+50,Phantom assembly,mbly
+52,Direct production / collective order,rder
+60,Phantom in planning,ning
+99,DO NOT USE, USE
+A7,DO NOT USE, USE
+A8,DO NOT USE, USE
+BZ,Costing from PP1, PP1
+C6,DO NOT USE, USE
+D6,Costing - from USS1,USS1
+D7,Costing - from USM4,USM4
+D8,Costing - from USM1,USM1
+D9,Costing - from USM3,USM3
+DA,Costing - from USM8,USM8
+DB,Costing - from MXM1,MXM1
+DC,Costing - from MXD1,MXD1
+DD,Costing - from MXD2,MXD2
+DE,Costing - from SUZH,SUZH
+DF,Costing - from BRM1,BRM1
+DH,Costing - from CNM1,CNM1
+DJ,Costing - from USM9,USM9
+DV,Costing - from USDV,USDV
+EB,Costing - from DED2,DED2
+EC,Costing - from DEM2,DEM2
+ED,Costing - from FRM2,FRM2
+EE,Costing - from IEM4,IEM4
+EK,Costing - from GBM1,GBM1
+ER,Costing - from USM6,USM6
+EW,Costing - from USM7,USM7
+G1,DO NOT USE, USE
+G2,DO NOT USE, USE
+J3,MRP - STO from USS1_VRGN,VRGN
+JA,MRP - STO from USM3_MRYS,MRYS
+JJ,MRP - STO from USD1_USM1_Direct Prod.,rod.
+JM,MRP - STO from USD1_USM8_Direct Prod.,rod.
+JT,MRP - STO from USM1 -  SL 562, 562
+JU,MRP - STO from USD1_USM6_Direct Prod.,rod.
+JW,MRP - STO from USD1_USM7_Direct Prod.,rod.
+K2,KMAT - Source USM3,USM3
+K3,KMAT - Source USM4,USM4
+K6,KMAT - Source USM1,USM1
+X6,MRP - STO from USS1,USS1
+X7,MRP - STO from USM4,USM4
+X8,MRP - STO from USM1,USM1
+X9,MRP - STO from USM3,USM3
+XA,MRP - STO from USM8,USM8
+XB,MRP - STO from MXM1,MXM1
+XC,MRP - STO from MXD1,MXD1
+XE,MRP - STO from SUZH,SUZH
+XF,MRP - STO from BRM1,BRM1
+XH,MRP - STO from CNM1,CNM1
+XJ,MRP - STO from USM9,USM9
+XV,MRP - STO from USDV,USDV
+YB,MRP - STO from DED2,DED2
+YC,MRP - STO from DEM2,DEM2
+YE,MRP - STO from IEM4,IEM4
+YK,MRP - STO from GBM1,GBM1
+YR,MRP - STO from USM6,USM6
+YW,MRP - STO from USM7,USM7
+Z3,SpecProcurem Costing - Z3,- Z3
+Z4,SpecProcurem Costing - Z4,- Z4
+ZZ,DO NOT USE, USE
