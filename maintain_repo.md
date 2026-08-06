@@ -908,7 +908,42 @@ The NIN run manifest should eventually record:
 
 ---
 
-## 23. Production Python Environment
+## 23. Invoking WSL-Resident Scripts from Windows 11
+
+Development happens inside WSL Debian, but production execution happens on the Windows 11 workstation. These are two different filesystems, and Windows does not natively resolve Linux paths such as `/home/<user>/nin-python`.
+
+The recommended deployment model in this document is to `git clone` a dedicated copy of the repository directly on Windows (see Section 21/22), so production runs entirely against a native Windows path such as `C:\NIN\nin-python`. Use this model whenever possible.
+
+If a script, scheduled task, or batch file on Windows must instead call a Python script or entry point that still physically resides inside the WSL filesystem (rather than a separate Windows-native clone), reference it through the WSL UNC network path, not a drive letter or POSIX path:
+
+```text
+\\wsl$\Debian\home\<user>\nin-python\run_nin_production.bat
+```
+
+or, on newer WSL versions where `\\wsl$` has been superseded:
+
+```text
+\\wsl.localhost\Debian\home\<user>\nin-python\run_nin_production.bat
+```
+
+Notes:
+
+- Replace `Debian` with the exact WSL distribution name reported by `wsl -l -v` from Windows.
+- These UNC paths only resolve while the WSL virtual machine is running (invoking them from Windows Explorer or a script will auto-start it, but scheduled tasks may need an explicit `wsl.exe` warm-up step).
+- Do not hardcode `\\wsl$\...` paths into committed configuration files or the application itself; keep them in local, uncommitted Windows launch scripts or Task Scheduler actions only.
+- Prefer invoking the interpreter explicitly rather than relying on a shebang, for example:
+
+```bat
+\\wsl$\Debian\home\<user>\nin-python\.venv\bin\python ^
+  -m nin_pipeline run ^
+  --config C:\NIN\config\production.yaml
+```
+
+- Mixed-path execution (Windows-triggered, WSL-resident code) is acceptable for ad hoc or support use, but it is not the primary production path. The dedicated Windows clone described in Sections 21–22 remains the recommended production layout because it avoids depending on WSL being installed and running on the production workstation.
+
+---
+
+## 24. Production Python Environment
 
 Create the production virtual environment:
 
@@ -937,7 +972,7 @@ C:\NIN\nin-python\.venv\Scripts\python.exe ^
 
 ---
 
-## 24. Production Configuration
+## 25. Production Configuration
 
 Keep production configuration outside Git:
 
@@ -957,7 +992,7 @@ Do not use `git update-index --assume-unchanged` as the main method of protectin
 
 ---
 
-## 25. Rollback Procedure
+## 26. Rollback Procedure
 
 To roll back:
 
@@ -985,7 +1020,7 @@ Then execute the standard production smoke test.
 
 ---
 
-## 26. Production Working Tree Check
+## 27. Production Working Tree Check
 
 Before deployment or execution:
 
@@ -1011,7 +1046,7 @@ Production should not normally have local modifications.
 
 ---
 
-## 27. Removing Merged Branches
+## 28. Removing Merged Branches
 
 After a feature is merged:
 
@@ -1041,7 +1076,7 @@ git branch -D <branch-name>
 
 ---
 
-## 28. Correcting Recent Work
+## 29. Correcting Recent Work
 
 Amend the latest unpushed commit:
 
@@ -1060,7 +1095,7 @@ Avoid rewriting history that other users may already be using.
 
 ---
 
-## 29. Temporarily Saving Work
+## 30. Temporarily Saving Work
 
 Use stash:
 
@@ -1094,7 +1129,7 @@ git stash push -u -m "Temporary work including new files"
 
 ---
 
-## 30. Discarding Local Changes
+## 31. Discarding Local Changes
 
 Review first:
 
@@ -1124,7 +1159,7 @@ These actions can permanently remove local work.
 
 ---
 
-## 31. Repository Health Commands
+## 32. Repository Health Commands
 
 Useful commands:
 
@@ -1141,7 +1176,7 @@ git log --oneline --decorate --graph -20
 
 ---
 
-## 32. Troubleshooting HTTPS and SSO
+## 33. Troubleshooting HTTPS and SSO
 
 ### Repeated authentication prompts
 
@@ -1217,7 +1252,7 @@ Use the approved corporate certificate chain or follow corporate IT guidance.
 
 ---
 
-## 33. Backup and Availability
+## 34. Backup and Availability
 
 Local work is not protected until it is committed and pushed.
 
@@ -1231,7 +1266,7 @@ Recommended practice:
 
 ---
 
-## 34. Suggested Initial Commit Sequence
+## 35. Suggested Initial Commit Sequence
 
 Create the initial branch:
 
@@ -1260,7 +1295,7 @@ Then open a pull request into `main`.
 
 ---
 
-## 35. Production Release Checklist
+## 36. Production Release Checklist
 
 Before tagging:
 
@@ -1296,7 +1331,7 @@ git checkout v0.1.0
 
 ---
 
-## 36. Operating Model
+## 37. Operating Model
 
 ```text
 WSL Development
@@ -1324,7 +1359,7 @@ NIN Production Execution
 
 ---
 
-## 37. Information to Confirm
+## 38. Information to Confirm
 
 The guide is usable now. The following details would allow the placeholders and governance sections to be finalized:
 
@@ -1343,7 +1378,7 @@ These details do not block the initial repository setup.
 
 ---
 
-## 38. Working Standard
+## 39. Working Standard
 
 The NIN Python project will be developed in WSL Debian and stored in the work GitHub repository through HTTPS and corporate SSO.
 

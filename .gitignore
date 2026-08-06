@@ -15,3 +15,11 @@ logs/
 output/
 test_data/raw/
 tests/live_input*/
+# Local Snowflake connection configuration
+snowflake_config.py
+
+# Local credentials and environment variables
+.env
+.env.*
+!.env.example
+
