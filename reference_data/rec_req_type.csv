@@ -1,1 +1,27 @@
-type,negative
+type,description,negative?
+AR,Dependent reservation,TRUE
+BA,Purchase requisition,FALSE
+BB,Subcontractor requirements of material provided,TRUE
+BE,Order item schedule line,FALSE
+FE,Production order,FALSE
+KB,Individual customer stock,FALSE
+LA,Shipping notification,FALSE
+LK,Stock with subcontractor,FALSE
+MR,Reservation,TRUE
+PA,Planned order,FALSE
+PB,Project stock,FALSE
+PP,Planned independent requirement,TRUE
+QM,Inspection lot for quality management,FALSE
+RP,Returns item,TRUE
+SB,Dependent requirement,TRUE
+U1,Release order for a stock transfer order,TRUE
+U2,Release order for a stock transfer requisition,TRUE
+U3,Transfer requirement for simulation order,TRUE
+VB,Quotation,TRUE
+VC,Order,TRUE
+VI,Delivery Free of Charge,TRUE
+VJ,Delivery,TRUE
+VT,Returns (availability check),FALSE
+WB,Plant stock,FALSE
+LE,SA schedule line,FALSE
+VG,Contract,TRUE

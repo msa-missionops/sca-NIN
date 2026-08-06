@@ -37,10 +37,11 @@ column names matching the corresponding `.pq` source exactly):
 - `region.csv` -- columns: Plant, Region
 - `top60.csv` -- columns: plant_material_key, plant, material, top_60_flag
 - `sourceplant.csv` -- columns: source_key, desc, source_plant
-- `rec_req_type.csv` -- columns: type, negative (accepts "true"/"false",
-  "1"/"0", or "yes"/"no", case-insensitive; any other/blank value is
-  treated as not-negative, matching the default in
-  `enrich_mrp_elements_rec`)
+- `rec_req_type.csv` -- columns: type, negative (also accepts `negative?`,
+  any casing; extra columns such as `description` are tolerated and
+  passed through unused). Values accept "true"/"false", "1"/"0", or
+  "yes"/"no", case-insensitive; any other/blank value is treated as
+  not-negative, matching the default in `enrich_mrp_elements_rec`)
 - `plant_evaluation.csv` -- columns: Plant (single active-plant row)
 
 `active_plant(reference_data)` returns that single plant. For running the
@@ -85,7 +86,27 @@ class ReferenceData:
 
 
 def _coerce_rec_req_type(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize the `rec_req_type` table's negative-flag column and
+    coerce it to a proper boolean.
+
+    Tolerates minor header variations business users may introduce when
+    editing this table directly (e.g. `negative?` instead of `negative`,
+    any casing) -- matched case-insensitively, trailing `?`/whitespace
+    stripped, then renamed to the canonical `negative` name expected by
+    `nin_pipeline.sources.mrp_elements_rec.enrich_mrp_elements_rec`. Any
+    other extra columns (e.g. a human-readable `description` column) are
+    passed through unchanged.
+    """
     df = df.copy()
+    if "negative" not in df.columns:
+        for col in df.columns:
+            if col.strip().rstrip("?").strip().lower() == "negative":
+                df = df.rename(columns={col: "negative"})
+                break
+    if "negative" not in df.columns:
+        raise KeyError(
+            "rec_req_type table must have a 'negative' (or 'negative?') column."
+        )
     df["negative"] = (
         df["negative"].astype("string").str.strip().str.lower().isin(TRUE_VALUES)
     )
