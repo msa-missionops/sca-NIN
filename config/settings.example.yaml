@@ -30,6 +30,12 @@ paths:
 file_selection:
   strategy: latest_modified
   ignore_hidden: true
+  # File extension filter used when locating each plant's latest
+  # MRP_ELEMENTS_DOH/MRP_ELEMENTS_REC export (mirrors the FileExt
+  # parameter in the original Power Query source). Defaults to "txt";
+  # set to "csv" if the live SAP exports are written as .csv files.
+  mrp_doh_file_extension: txt
+  mrp_rec_file_extension: txt
 
 output:
   write_parquet: true

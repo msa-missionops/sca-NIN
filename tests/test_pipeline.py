@@ -234,6 +234,29 @@ paths:
     return load_config(config_path)
 
 
+def make_config_with_csv_mrp_extension(tmp_path) -> PipelineConfig:
+    config_path = tmp_path / "settings.yaml"
+    config_path.write_text(
+        f"""
+paths:
+  prdpl3_folder: "{tmp_path / 'prdpl3'}"
+  mrp_rec_folder: "{tmp_path / 'mrp_rec'}"
+  mrp_doh_folder: "{tmp_path / 'mrp_doh'}"
+  mb5t_folder: "{tmp_path / 'mb5t'}"
+  reference_data_folder: "{tmp_path / 'reference_data'}"
+  output_folder: "{tmp_path / 'output'}"
+  run_folder: "{tmp_path / 'runs'}"
+  log_folder: "{tmp_path / 'logs'}"
+
+file_selection:
+  mrp_doh_file_extension: csv
+  mrp_rec_file_extension: csv
+""",
+        encoding="utf-8",
+    )
+    return load_config(config_path)
+
+
 def test_run_pipeline_assembles_base_table_end_to_end(tmp_path):
     prdpl3_folder = tmp_path / "prdpl3"
     prdpl3_folder.mkdir()
@@ -334,6 +357,80 @@ def test_run_pipeline_assembles_base_table_end_to_end(tmp_path):
     assert (output_folder / "nin_base_table.csv").exists()
     assert (output_folder / "nin_base_table.parquet").exists()
     assert (output_folder / "nin_base_table.xlsx").exists()
+
+
+def test_run_pipeline_respects_configured_mrp_file_extension(tmp_path):
+    """Live SAP MRP_ELEMENTS_DOH/REC exports may be written as .csv rather
+    than the .txt default (see docs/nin_data_contracts.md); the
+    file_selection.mrp_doh_file_extension/mrp_rec_file_extension settings
+    let the file-discovery step be pointed at whichever extension is
+    actually produced."""
+    prdpl3_folder = tmp_path / "prdpl3"
+    prdpl3_folder.mkdir()
+    write_prdpl3_export(
+        prdpl3_folder / "PRDPL3_export.txt",
+        [
+            {
+                "Plnt": "US01",
+                "Material": "000123",
+                "Product hierarchy": "00020ABC",
+                "DelFlag": "",
+                "Tot Valuated Stk": "200",
+                "Total Value": "5000",
+                "Safety Stock": "10",
+            }
+        ],
+    )
+
+    mb5t_folder = tmp_path / "mb5t"
+    mb5t_folder.mkdir()
+    write_mb5t_export(
+        mb5t_folder / "MB5T_export.txt",
+        [{"Plnt": "US01", "Material": "000123", "Quantity": "7"}],
+    )
+
+    doh_run_folder = tmp_path / "mrp_doh" / "20260201_run"
+    doh_run_folder.mkdir(parents=True)
+    write_doh_export(
+        doh_run_folder / "MM_MRP_ELEMENTS_DOH_20260201_US01_x.csv",
+        [
+            {
+                "Plnt": "US01",
+                "Material": "000123",
+                "El": "VJ",
+                "Customer Request Date": "2026-12-06",
+                "Rec./reqd.qty": "30",
+                "BUn": "EA",
+            }
+        ],
+    )
+
+    rec_run_folder = tmp_path / "mrp_rec" / "20260201_run"
+    rec_run_folder.mkdir(parents=True)
+    write_rec_export(
+        rec_run_folder / "MM_MRP_ELEMENTS_REC_20260201_US01_x.csv",
+        [
+            {
+                "Plnt": "US01",
+                "Material": "000123",
+                "El": "VJ",
+                "Customer Request Date": "2026-12-04",
+                "Rec./reqd.qty": "10",
+                "BUn": "EA",
+            }
+        ],
+    )
+
+    write_reference_data(tmp_path / "reference_data")
+
+    config = make_config_with_csv_mrp_extension(tmp_path)
+    result = run_pipeline(config, run_id="20260201_000000")
+
+    assert len(result.base_table) == 1
+    row = result.base_table.iloc[0]
+    assert row["plant_material_key"] == "US01-123"
+    assert row["VJ"] == 30
+    assert row["week 1"] == 10
 
 
 def test_run_pipeline_accepts_reference_data_workbook_instead_of_csv_folder(tmp_path):

@@ -20,7 +20,7 @@ from nin_pipeline.business.build_overview import (
     assemble_nin_base_table,
     assemble_overview_p1,
 )
-from nin_pipeline.config import PipelineConfig, PipelinePaths
+from nin_pipeline.config import FileSelectionConfig, PipelineConfig, PipelinePaths
 from nin_pipeline.ingestion import find_latest_file
 from nin_pipeline.reference_data import (
     ReferenceData,
@@ -105,7 +105,8 @@ def run_pipeline(config: PipelineConfig, run_id: str | None = None) -> PipelineR
         plants = [active_plant(reference_data)]
 
     per_plant_results = [
-        _run_for_plant(paths, reference_data, plant) for plant in plants
+        _run_for_plant(paths, reference_data, plant, config.file_selection)
+        for plant in plants
     ]
 
     base_table = pd.concat(
@@ -145,7 +146,10 @@ class _PlantResult:
 
 
 def _run_for_plant(
-    paths: PipelinePaths, reference_data: ReferenceData, plant: str
+    paths: PipelinePaths,
+    reference_data: ReferenceData,
+    plant: str,
+    file_selection: FileSelectionConfig,
 ) -> _PlantResult:
     """Run every per-source step for a single plant and assemble its base
     table. Shared by both the single-plant and multi-plant (all-plants)
@@ -163,13 +167,21 @@ def _run_for_plant(
     mb5t_clean = clean_mb5t(mb5t_file, active_plant=plant)
     mb5t_enriched = enrich_mb5t(mb5t_clean)
 
-    doh_file, doh_run_folder = locate_latest_doh_file(paths.mrp_doh_folder, plant=plant)
+    doh_file, doh_run_folder = locate_latest_doh_file(
+        paths.mrp_doh_folder,
+        plant=plant,
+        extension=file_selection.mrp_doh_file_extension,
+    )
     doh_clean = clean_mrp_elements_doh(
         doh_file, run_folder_name=doh_run_folder, active_plant=plant
     )
     doh_pivot = pivot_mrp_elements_doh(doh_clean)
 
-    rec_file, rec_run_folder = locate_latest_rec_file(paths.mrp_rec_folder, plant=plant)
+    rec_file, rec_run_folder = locate_latest_rec_file(
+        paths.mrp_rec_folder,
+        plant=plant,
+        extension=file_selection.mrp_rec_file_extension,
+    )
     rec_clean = clean_mrp_elements_rec(
         rec_file, run_folder_name=rec_run_folder, active_plant=plant
     )

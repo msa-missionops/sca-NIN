@@ -18,6 +18,12 @@ and docs/nin_data_contracts.md Open Decision #11). When set, the pipeline
 runs once per listed plant and concatenates the results into one combined
 `nin_base_table`, instead of running for the single plant named in
 `plant_evaluation.csv`.
+
+`file_selection.mrp_doh_file_extension`/`mrp_rec_file_extension` control the
+file extension `find_plant_file` filters on when locating each plant's
+MRP_ELEMENTS_DOH/MRP_ELEMENTS_REC export (mirrors the `FileExt` parameter in
+the original Power Query source). Defaults to "txt"; set to "csv" if the
+live SAP exports are written as .csv files.
 """
 
 from __future__ import annotations
@@ -46,6 +52,8 @@ class PipelinePaths:
 class FileSelectionConfig:
     strategy: str = "latest_modified"
     ignore_hidden: bool = True
+    mrp_doh_file_extension: str = "txt"
+    mrp_rec_file_extension: str = "txt"
 
 
 @dataclass
@@ -110,6 +118,8 @@ def load_config(path: str | Path) -> PipelineConfig:
     file_selection = FileSelectionConfig(
         strategy=fs_raw.get("strategy", "latest_modified"),
         ignore_hidden=fs_raw.get("ignore_hidden", True),
+        mrp_doh_file_extension=fs_raw.get("mrp_doh_file_extension", "txt"),
+        mrp_rec_file_extension=fs_raw.get("mrp_rec_file_extension", "txt"),
     )
 
     out_raw = raw.get("output", {})

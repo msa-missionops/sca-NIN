@@ -14,3 +14,4 @@ runs/
 logs/
 output/
 test_data/raw/
+tests/live_input*/
