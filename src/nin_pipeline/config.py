@@ -9,6 +9,15 @@ plant_evaluation) are *not* part of this config -- they are loaded by
 editing the same named Excel Tables they already maintain, no export step)
 or a folder of CSVs (`paths.reference_data_folder`, for automated/CSV-only
 setups). Exactly one of the two must be set.
+
+Optionally, `paths.active_plants_folder` points at a folder containing a
+headerless, single-column CSV of plant codes (one per row) -- the latest
+file in that folder is used, matching the same "latest file" convention as
+every other source folder (see `nin_pipeline.reference_data.load_active_plants`
+and docs/nin_data_contracts.md Open Decision #11). When set, the pipeline
+runs once per listed plant and concatenates the results into one combined
+`nin_base_table`, instead of running for the single plant named in
+`plant_evaluation.csv`.
 """
 
 from __future__ import annotations
@@ -30,6 +39,7 @@ class PipelinePaths:
     log_folder: Path
     reference_data_folder: Path | None = None
     reference_data_workbook: Path | None = None
+    active_plants_folder: Path | None = None
 
 
 @dataclass
@@ -69,6 +79,7 @@ def load_config(path: str | Path) -> PipelineConfig:
 
     reference_data_folder = paths_raw.get("reference_data_folder") or None
     reference_data_workbook = paths_raw.get("reference_data_workbook") or None
+    active_plants_folder = paths_raw.get("active_plants_folder") or None
 
     paths = PipelinePaths(
         prdpl3_folder=Path(_require(paths_raw, "prdpl3_folder", "paths")),
@@ -83,6 +94,9 @@ def load_config(path: str | Path) -> PipelineConfig:
         ),
         reference_data_workbook=(
             Path(reference_data_workbook) if reference_data_workbook else None
+        ),
+        active_plants_folder=(
+            Path(active_plants_folder) if active_plants_folder else None
         ),
     )
 

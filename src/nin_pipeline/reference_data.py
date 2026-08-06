@@ -43,6 +43,12 @@ column names matching the corresponding `.pq` source exactly):
   `enrich_mrp_elements_rec`)
 - `plant_evaluation.csv` -- columns: Plant (single active-plant row)
 
+`active_plant(reference_data)` returns that single plant. For running the
+pipeline across *every* plant in scope instead, see `load_active_plants()`
+below, which reads a separate, operationally-maintained multi-plant list
+(not one of the five Excel Tables above -- see
+docs/nin_data_contracts.md Open Decision #11).
+
 The Excel Table names looked up by `load_reference_data_from_workbook`
 mirror the CSV keys above 1:1 (see `EXCEL_TABLE_NAMES`).
 """
@@ -148,3 +154,19 @@ def active_plant(reference_data: ReferenceData) -> str:
     if len(df) == 0:
         raise ValueError("plant_evaluation table must contain one plant row.")
     return str(df.iloc[0]["Plant"]).strip().upper()
+
+
+def load_active_plants(path: str | Path) -> list[str]:
+    """Load a multi-plant run list from a headerless, single-column CSV
+    (one plant code per row -- e.g. the file dropped in
+    `\\\\filer3\\power_bi$\\GSP\\Stockout_Excel\\Input`), for running the
+    pipeline across every plant in scope rather than the single plant in
+    `plant_evaluation.csv`.
+
+    Blank rows are skipped; codes are trimmed and upper-cased; duplicates
+    are dropped while preserving first-seen order.
+    """
+    df = pd.read_csv(path, header=None, dtype="string")
+    codes = df[0].astype("string").str.strip().str.upper()
+    codes = codes[codes.notna() & (codes != "")]
+    return list(dict.fromkeys(codes))

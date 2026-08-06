@@ -20,10 +20,12 @@ from nin_pipeline.business.build_overview import (
     assemble_nin_base_table,
     assemble_overview_p1,
 )
-from nin_pipeline.config import PipelineConfig
+from nin_pipeline.config import PipelineConfig, PipelinePaths
 from nin_pipeline.ingestion import find_latest_file
 from nin_pipeline.reference_data import (
+    ReferenceData,
     active_plant,
+    load_active_plants,
     load_reference_data,
     load_reference_data_from_workbook,
 )
@@ -58,9 +60,14 @@ def run_pipeline(config: PipelineConfig, run_id: str | None = None) -> PipelineR
 
     Steps (see docs/NIN_Python_Plan.md sections 9-11):
 
-    1. Load reference/tag data and determine the single active plant.
-    2. Discover and parse the latest PRDPL3, MB5T, MRP_ELEMENTS_DOH, and
-       MRP_ELEMENTS_REC exports for that plant. REC's per-week
+    1. Load reference/tag data and determine which plant(s) to run for --
+       either the single plant in `plant_evaluation.csv`, or, if
+       `paths.active_plants_folder` is configured, every plant listed in
+       the latest file there (see
+       `nin_pipeline.reference_data.load_active_plants` and
+       docs/nin_data_contracts.md Open Decision #11).
+    2. For each plant: discover and parse the latest PRDPL3, MB5T,
+       MRP_ELEMENTS_DOH, and MRP_ELEMENTS_REC exports. REC's per-week
        requirement rows are transposed into `Total Forecast (Qty)`/
        `week 1`..`week 27` columns (see
        `nin_pipeline.sources.mrp_elements_rec.pivot_mrp_elements_rec_weekly`)
@@ -70,9 +77,11 @@ def run_pipeline(config: PipelineConfig, run_id: str | None = None) -> PipelineR
     3. Assemble `build_overview_p1` from enriched PRDPL3, then the final
        `nin_base_table` by joining DOH/MB5T/REC-weekly. BOBL processing is
        deferred for now (see docs/nin_data_contracts.md Open Decision #10)
-       -- its four output columns are emitted as null placeholders.
+       -- its four output columns are emitted as null placeholders. When
+       multiple plants are run, each plant's base table is assembled
+       independently, then concatenated into one combined result.
     4. Write a run manifest recording the selected source files and row
-       counts, per docs/NIN_Python_Plan.md section 10.
+       counts per plant, per docs/NIN_Python_Plan.md section 10.
     """
     run_id = run_id or _new_run_id()
     paths = config.paths
@@ -82,8 +91,65 @@ def run_pipeline(config: PipelineConfig, run_id: str | None = None) -> PipelineR
         if paths.reference_data_workbook is not None
         else load_reference_data(paths.reference_data_folder)
     )
-    plant = active_plant(reference_data)
 
+    if paths.active_plants_folder is not None:
+        active_plants_file = find_latest_file(paths.active_plants_folder)
+        plants = load_active_plants(active_plants_file)
+        if not plants:
+            raise ValueError(
+                f"No plant codes found in {active_plants_file} "
+                f"(paths.active_plants_folder)."
+            )
+    else:
+        active_plants_file = None
+        plants = [active_plant(reference_data)]
+
+    per_plant_results = [
+        _run_for_plant(paths, reference_data, plant) for plant in plants
+    ]
+
+    base_table = pd.concat(
+        [result.base_table for result in per_plant_results], ignore_index=True
+    )
+
+    sources: dict = {
+        "plants": {p: r.sources for p, r in zip(plants, per_plant_results)}
+    }
+    if active_plants_file is not None:
+        sources["active_plants_file"] = str(active_plants_file)
+
+    row_counts: dict = {
+        "plants": {p: r.row_counts for p, r in zip(plants, per_plant_results)},
+        "nin_base_table": len(base_table),
+    }
+
+    manifest_path = _write_manifest(
+        config=config,
+        run_id=run_id,
+        sources=sources,
+        row_counts=row_counts,
+    )
+
+    _write_output(config, base_table)
+
+    return PipelineResult(
+        run_id=run_id, base_table=base_table, manifest_path=manifest_path
+    )
+
+
+@dataclass
+class _PlantResult:
+    base_table: pd.DataFrame
+    sources: dict
+    row_counts: dict
+
+
+def _run_for_plant(
+    paths: PipelinePaths, reference_data: ReferenceData, plant: str
+) -> _PlantResult:
+    """Run every per-source step for a single plant and assemble its base
+    table. Shared by both the single-plant and multi-plant (all-plants)
+    code paths in `run_pipeline`."""
     prdpl3_file = find_latest_file(paths.prdpl3_folder)
     prdpl3_clean = clean_prdpl3(prdpl3_file, active_plant=plant)
     prdpl3_enriched = enrich_prdpl3(
@@ -118,9 +184,8 @@ def run_pipeline(config: PipelineConfig, run_id: str | None = None) -> PipelineR
         rec_weekly=rec_weekly,
     )
 
-    manifest_path = _write_manifest(
-        config=config,
-        run_id=run_id,
+    return _PlantResult(
+        base_table=base_table,
         sources={
             "prdpl3": str(prdpl3_file),
             "mrp_rec": str(rec_file),
@@ -134,12 +199,6 @@ def run_pipeline(config: PipelineConfig, run_id: str | None = None) -> PipelineR
             "mb5t_raw": len(mb5t_clean),
             "nin_base_table": len(base_table),
         },
-    )
-
-    _write_output(config, base_table)
-
-    return PipelineResult(
-        run_id=run_id, base_table=base_table, manifest_path=manifest_path
     )
 
 

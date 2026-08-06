@@ -17,6 +17,12 @@ paths:
   mrp_doh_folder: "\\\\filer3\\power_bi$\\GSP\\NIN\\output\\MRP_DOH"
   mb5t_folder: "\\\\filer3\\power_bi$\\GSP\\NIN\\output\\MB5T"
   reference_data_folder: "./reference_data"
+  # Optional: run the pipeline for every plant listed in the latest file
+  # under this folder (a headerless, single-column CSV of plant codes --
+  # e.g. \\filer3\power_bi$\GSP\Stockout_Excel\Input), instead of the
+  # single plant in reference_data/plant_evaluation.csv. See
+  # docs/nin_data_contracts.md Open Decision #11.
+  # active_plants_folder: "\\\\filer3\\power_bi$\\GSP\\Stockout_Excel\\Input"
   output_folder: "./output"
   run_folder: "./runs"
   log_folder: "./logs"
@@ -29,3 +35,4 @@ output:
   write_parquet: true
   write_csv: true
   write_excel: true
+

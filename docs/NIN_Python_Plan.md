@@ -642,6 +642,27 @@ a separate PowerBI export rather than being business-maintained tag data,
 and BOBL processing is currently deferred from the pipeline entirely (see
 `docs/nin_data_contracts.md` Open Decision #10).
 
+### 8.2 Running for all plants: `active_plants_folder`
+
+By default the pipeline runs for the single plant named in
+`plant_evaluation.csv`/`plant_evaluation` (see `active_plant()`). To run it
+for *every* plant instead, set the optional `paths.active_plants_folder`:
+
+```yaml
+paths:
+  active_plants_folder: "\\filer3\power_bi$\GSP\Stockout_Excel\Input"
+```
+
+This points at a folder containing a headerless, single-column CSV of
+plant codes (one per row, e.g. `USD1`/`MXD1`/`DED2`) — the latest file in
+the folder is used, matching the same "latest file" convention as every
+other source folder. `nin_pipeline.reference_data.load_active_plants()`
+parses it (trims/upper-cases, drops blanks/duplicates). `run_pipeline`
+then runs the full per-plant pipeline once for each listed plant and
+concatenates every plant's base table into **one combined
+`nin_base_table`** — not separate outputs per plant. See
+`docs/nin_data_contracts.md` Open Decision #11.
+
 ---
 
 ## 9. File Discovery and Run Selection

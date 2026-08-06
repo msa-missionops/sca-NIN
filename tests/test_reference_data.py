@@ -6,6 +6,7 @@ from openpyxl.worksheet.table import Table
 
 from nin_pipeline.reference_data import (
     active_plant,
+    load_active_plants,
     load_reference_data,
     load_reference_data_from_workbook,
 )
@@ -136,3 +137,20 @@ def test_load_reference_data_from_workbook_raises_when_table_missing(tmp_path):
 
     with pytest.raises(ValueError, match="tbl_Tag_Top60"):
         load_reference_data_from_workbook(workbook_path)
+
+
+def test_load_active_plants_reads_headerless_single_column_csv(tmp_path):
+    """Mirrors the real file dropped at
+    \\filer3\\power_bi$\\GSP\\Stockout_Excel\\Input -- one plant code per
+    row, no header, single column."""
+    path = tmp_path / "active_plants.csv"
+    path.write_text("USD1\nMXD1\nDED2\n")
+
+    assert load_active_plants(path) == ["USD1", "MXD1", "DED2"]
+
+
+def test_load_active_plants_trims_upper_cases_and_dedupes(tmp_path):
+    path = tmp_path / "active_plants.csv"
+    path.write_text(" usd1 \nMXD1\n\nusd1\nDED2\n")
+
+    assert load_active_plants(path) == ["USD1", "MXD1", "DED2"]
